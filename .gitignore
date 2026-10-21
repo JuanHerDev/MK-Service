@@ -52,8 +52,6 @@ frontend/.next/
 frontend/out/
 frontend/dist/
 frontend/build/
-!frontend/app/(app)/reports/
-!frontend/app/(app)/reports/**
 .next/
 out/
 .npm/
@@ -88,13 +86,14 @@ dist/
 *.pid
 *.tmp
 tmp/
+*.orig
+*.bak
+
+# Generated report artifacts (NOT the Next.js route)
 /reports/
 storage/reports/
 backend/reports/
-reports/
 *.report.pdf
-*.orig
-*.bak
 
 # OS / IDE
 .DS_Store
