@@ -52,6 +52,8 @@ frontend/.next/
 frontend/out/
 frontend/dist/
 frontend/build/
+!frontend/app/(app)/reports/
+!frontend/app/(app)/reports/**
 .next/
 out/
 .npm/
@@ -86,7 +88,11 @@ dist/
 *.pid
 *.tmp
 tmp/
+/reports/
+storage/reports/
+backend/reports/
 reports/
+*.report.pdf
 *.orig
 *.bak
 
