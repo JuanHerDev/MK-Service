@@ -54,13 +54,13 @@ def cancel_campaign(
     return campaign_service.cancel_campaign(db, membership=membership, campaign_id=campaign_id)
 
 @router.post("/{campaign_id}/run", response_model=CampaignOut)
-def run_campaign_stub(
+def run_campaign(
     campaign_id: int,
     membership: OrganizationMember = Depends(require_write_role),
     db: Session = Depends(get_db),
 ):
-    """Sub execute: generate demo findings and mark campaign as completed. This is a stub for the actual execution logic."""
-    return campaign_service.run_campaign_stub(
+    """Run live probes against the campaign target and open findings when evidence is found."""
+    return campaign_service.run_campaign(
         db, membership=membership, campaign_id=campaign_id
     )
 
