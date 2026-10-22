@@ -1,4 +1,7 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -51,3 +54,19 @@ def get_report(
     db: Session = Depends(get_db),
 ):
     return report_service.get_report(db, membership=membership, report_id=report_id)
+
+
+@router.get("/reports/{report_id}/download")
+def download_report(
+    report_id: int,
+    membership: OrganizationMember = Depends(require_read_role),
+    db: Session = Depends(get_db),
+):
+    path: Path = report_service.get_report_file_path(
+        db, membership=membership, report_id=report_id
+    )
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=path.name,
+    )

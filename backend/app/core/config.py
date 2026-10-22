@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # If false or Redis is down, runs probes in-process.
     campaign_async: bool = True
 
+    # Local directory for generated PDFs and payload files
+    storage_path: str = "storage"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

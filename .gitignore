@@ -40,6 +40,8 @@ env/
 coverage.xml
 htmlcov/
 coverage/
+storage/
+reports/
 
 # Alembic: compiled only
 alembic/**/__pycache__/
