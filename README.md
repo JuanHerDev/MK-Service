@@ -155,6 +155,21 @@ Abre http://localhost:3000
 
 ---
 
+## Worker de campañas (producción)
+
+Las campañas no se ejecutan dentro del request HTTP. Un proceso **worker (RQ)** consume la cola Redis.
+
+En producción / Docker el worker es **persistente** (no se lanza a mano en cada demo):
+
+```bash
+docker compose up -d postgres redis backend worker
+docker compose logs -f worker
+```
+
+Detalle, Windows local y variables: backend/README.md → sección Worker RQ.
+
+---
+
 ## Scripts útiles
 
 ```bash
