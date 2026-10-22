@@ -221,7 +221,8 @@ def run_campaign(
     campaign_id: int,
 ) -> CampaignOut:
     """Execute real probes against the target chat endpoint and open findings on hits."""
-    from app.services.attack_engine import run_probes
+    from app.models.attack_document import AttackDocument
+    from app.services.attack_engine import DocPayload, payload_bytes_for_document, run_all_probes
 
     c = _load_campaign(db, campaign_id, membership.organization_id)
     current = c.status.status_code if c.status else ""
@@ -237,6 +238,10 @@ def run_campaign(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Campaign target is missing or inactive",
         )
+
+    mode_code = "basic"
+    if target.connection_mode:
+        mode_code = target.connection_mode.mode_code
 
     running = _status_row(db, "running")
     completed = _status_row(db, "completed")
@@ -257,16 +262,62 @@ def run_campaign(
             detail="Finding catalogs not seeded (statuses, severities, categories)",
         )
 
+    # Resolve attack documents for complete mode
+    doc_ids: list[int] = []
+    if c.config_json:
+        try:
+            cfg = json.loads(c.config_json)
+            raw_ids = cfg.get("document_ids") or []
+            doc_ids = [int(x) for x in raw_ids]
+        except (json.JSONDecodeError, TypeError, ValueError):
+            doc_ids = []
+
+    payloads: list[DocPayload] = []
+    if mode_code == "complete":
+        q = (
+            db.query(AttackDocument)
+            .options(joinedload(AttackDocument.category))
+            .filter(AttackDocument.is_active.is_(True))
+        )
+        if doc_ids:
+            q = q.filter(AttackDocument.attack_document_id.in_(doc_ids))
+        else:
+            # Default arsenal: global docs (+ org docs)
+            q = q.filter(
+                (AttackDocument.scope == "global")
+                | (AttackDocument.organization_id == membership.organization_id)
+            )
+        docs = q.all()
+        for d in docs:
+            cat_code = d.category.category_code if d.category else "prompt_injection_indirect"
+            content, canary = payload_bytes_for_document(
+                technique=d.technique,
+                file_name=d.file_name,
+                storage_path=d.storage_path,
+            )
+            payloads.append(
+                DocPayload(
+                    name=d.name,
+                    file_name=d.file_name,
+                    technique=d.technique,
+                    category_code=cat_code,
+                    content=content,
+                    expected_canary=canary,
+                )
+            )
+
     now = datetime.now(timezone.utc)
     c.campaign_status_id = running.campaign_status_id
     c.started_at = now
     c.progress_percent = 10
     db.commit()
 
-    results = run_probes(
+    results = run_all_probes(
         target,
         scope_prompt_injection=c.scope_prompt_injection,
         scope_data_leakage=c.scope_data_leakage,
+        mode=mode_code,
+        documents=payloads or None,
     )
 
     c = _load_campaign(db, campaign_id, membership.organization_id)
