@@ -134,3 +134,46 @@ export async function api<T>(path: string, opts: Options = {}): Promise<T> {
   }
   return data as T;
 }
+
+/** Download a report PDF with Bearer auth (blob + temporary object URL). */
+export async function downloadReport(reportId: number, filename?: string): Promise<void> {
+  const url = `${API_URL}${API_PREFIX}/reports/${reportId}/download`;
+
+  const doFetch = () => {
+    const headers: Record<string, string> = {};
+    const access = tokens.access;
+    if (access) headers.Authorization = `Bearer ${access}`;
+    return fetch(url, { method: "GET", headers });
+  };
+
+  let res = await doFetch();
+  if (res.status === 401 && (await tryRefresh())) {
+    res = await doFetch();
+  }
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    if (res.status === 401) {
+      tokens.clear();
+      window.dispatchEvent(new Event("mk:unauthorized"));
+    }
+    throw new ApiError(res.status, errorMessage(data, `Error ${res.status}`));
+  }
+
+  const blob = await res.blob();
+  const cd = res.headers.get("Content-Disposition");
+  let name = filename || `report_${reportId}.pdf`;
+  if (cd) {
+    const m = /filename\*?=(?:UTF-8''|")?([^";\n]+)/i.exec(cd);
+    if (m?.[1]) name = decodeURIComponent(m[1].replace(/"/g, "").trim());
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = objectUrl;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objectUrl);
+}

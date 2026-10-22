@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Plus, RefreshCw } from "lucide-react";
+import { Download, FileText, Plus, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
@@ -16,7 +16,7 @@ import {
   Select,
   cx,
 } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, downloadReport } from "@/lib/api";
 import { canWrite, useAuth } from "@/lib/auth";
 import { fmtBytes, fmtDate, fmtRelative, pad } from "@/lib/format";
 import type { Campaign, Paginated, Report } from "@/lib/types";
@@ -37,6 +37,7 @@ export default function ReportsPage() {
   const [creating, setCreating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
 
   const campaigns = useResource(() => api<Paginated<Campaign>>("/campaigns", { query: { per_page: 100 } }));
   const { data, error, loading, reload } = useResource(
@@ -73,6 +74,25 @@ export default function ReportsPage() {
   const completedCampaigns = (campaigns.data?.items ?? []).filter((c) =>
     ["completed", "failed"].includes(c.status),
   );
+
+
+  async function handleDownload(r: Report) {
+    if (r.report_status !== "ready") {
+      setActionError("El reporte aún no está listo para descargar");
+      return;
+    }
+    setDownloadingId(r.report_id);
+    setActionError(null);
+    try {
+      const suggested = `mk_rpt_${r.report_id}_${r.report_type}_${r.language}.pdf`;
+      await downloadReport(r.report_id, suggested);
+      setNotice(`Descarga iniciada: RPT-${pad(r.report_id, 3)}`);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "No se pudo descargar el reporte");
+    } finally {
+      setDownloadingId(null);
+    }
+  }
 
   return (
     <>
@@ -174,6 +194,7 @@ export default function ReportsPage() {
                     <th className="px-4 py-3 font-medium">Tamaño</th>
                     <th className="px-4 py-3 font-medium">Generado</th>
                     <th className="px-4 py-3 font-medium">Ruta</th>
+                    <th className="px-4 py-3 font-medium">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -216,6 +237,17 @@ export default function ReportsPage() {
                       </td>
                       <td className="max-w-[180px] truncate px-4 py-3 font-mono text-[10px] text-dim" title={r.file_path ?? undefined}>
                         {r.file_path || "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Button
+                          size="sm"
+                          disabled={r.report_status !== "ready" || downloadingId === r.report_id}
+                          onClick={() => handleDownload(r)}
+                          title={r.report_status === "ready" ? "Descargar PDF" : "No disponible"}
+                        >
+                          <Download className={cx("size-3.5", downloadingId === r.report_id && "animate-spin")} />
+                          {downloadingId === r.report_id ? "…" : "PDF"}
+                        </Button>
                       </td>
                     </tr>
                   ))}
