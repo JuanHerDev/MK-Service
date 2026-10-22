@@ -45,7 +45,7 @@ export default function LoginPage() {
       <section className="relative hidden flex-col justify-between border-r border-line p-10 lg:flex">
         <header className="flex items-start justify-between font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
           <div>
-            <p className="text-fg">AVI—RAG</p>
+            <p className="text-fg">MK Service</p>
             <p>Adversarial Validation Interface</p>
           </div>
           <div className="text-right">

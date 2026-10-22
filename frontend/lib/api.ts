@@ -3,8 +3,8 @@ import type { TokenResponse } from "./types";
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
 const API_PREFIX = "/api/v1";
 
-const ACCESS_KEY = "avi.access";
-const REFRESH_KEY = "avi.refresh";
+const ACCESS_KEY = "mk.access";
+const REFRESH_KEY = "mk.refresh";
 
 export class ApiError extends Error {
   status: number;
@@ -128,7 +128,7 @@ export async function api<T>(path: string, opts: Options = {}): Promise<T> {
   if (!res.ok) {
     if (res.status === 401 && auth) {
       tokens.clear();
-      window.dispatchEvent(new Event("avi:unauthorized"));
+      window.dispatchEvent(new Event("mk:unauthorized"));
     }
     throw new ApiError(res.status, errorMessage(data, `Error ${res.status}`));
   }

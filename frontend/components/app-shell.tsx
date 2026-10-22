@@ -66,7 +66,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex items-center justify-between border-b border-line px-5 py-5">
         <Link href="/dashboard" className="block">
           <p className="font-mono text-[13px] tracking-[0.22em] text-fg uppercase">
-            <ScrambleText text="AVI—RAG" hover />
+            <ScrambleText text="MK Service" hover />
           </p>
           <p className="font-mono text-[10px] tracking-[0.16em] text-dim uppercase">Control v0.1</p>
         </Link>

@@ -8,6 +8,12 @@ type AuthState = {
   user: Me | null;
   status: "loading" | "authenticated" | "anonymous";
   login: (email: string, password: string) => Promise<void>;
+  register: (data: {
+    email: string;
+    password: string;
+    full_name?: string;
+    organization_name: string;
+  }) => Promise<void>;
   logout: () => Promise<void>;
   reload: () => Promise<void>;
 };
@@ -41,8 +47,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setStatus("anonymous");
     };
-    window.addEventListener("avi:unauthorized", onUnauthorized);
-    return () => window.removeEventListener("avi:unauthorized", onUnauthorized);
+    window.addEventListener("mk:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("mk:unauthorized", onUnauthorized);
   }, [reload]);
 
   const login = useCallback(
@@ -50,6 +56,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const t = await api<TokenResponse>("/auth/login", {
         method: "POST",
         body: { email, password },
+        auth: false,
+      });
+      tokens.set(t);
+      await reload();
+    },
+    [reload],
+  );
+
+  const register = useCallback(
+    async (data: {
+      email: string;
+      password: string;
+      full_name?: string;
+      organization_name: string;
+    }) => {
+      const t = await api<TokenResponse>("/auth/register", {
+        method: "POST",
+        body: data,
         auth: false,
       });
       tokens.set(t);
@@ -69,7 +93,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, status, login, logout, reload }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, status, login, register, logout, reload }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 
