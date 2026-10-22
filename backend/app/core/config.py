@@ -19,6 +19,10 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:5173"
 
+    # If true, POST /campaigns/{id}/run enqueues RQ job (requires worker).
+    # If false or Redis is down, runs probes in-process.
+    campaign_async: bool = True
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

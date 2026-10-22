@@ -214,30 +214,61 @@ def _status_row(db: Session, code: str) -> CampaignStatus:
     return _status_by_code(db, code)
 
 
-def run_campaign(
+
+def mark_campaign_failed(
     db: Session,
     *,
-    membership: OrganizationMember,
     campaign_id: int,
-) -> CampaignOut:
-    """Execute real probes against the target chat endpoint and open findings on hits."""
+    organization_id: int,
+    reason: str = "Execution failed",
+) -> None:
+    """Best-effort: set campaign to failed (used by worker on crash)."""
+    c = (
+        db.query(Campaign)
+        .options(joinedload(Campaign.status))
+        .filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.organization_id == organization_id,
+        )
+        .first()
+    )
+    if not c:
+        return
+    code = c.status.status_code if c.status else ""
+    if code in ("completed", "cancelled", "failed"):
+        return
+    failed = _status_row(db, "failed")
+    c.campaign_status_id = failed.campaign_status_id
+    c.progress_percent = 100
+    c.finished_at = datetime.now(timezone.utc)
+    db.commit()
+
+
+def execute_campaign_run(
+    db: Session,
+    *,
+    campaign_id: int,
+    organization_id: int,
+) -> None:
+    """Core attack loop (sync). Called by API fallback or RQ worker."""
     from app.models.attack_document import AttackDocument
     from app.services.attack_engine import DocPayload, payload_bytes_for_document, run_all_probes
 
-    c = _load_campaign(db, campaign_id, membership.organization_id)
+    c = _load_campaign(db, campaign_id, organization_id)
     current = c.status.status_code if c.status else ""
-    if current not in ("queued", "failed"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot run campaign in status '{current}' (need queued or failed)",
-        )
+    # Worker may pick up queued; API may have left it queued
+    if current not in ("queued", "failed", "running"):
+        return
 
     target = c.target
     if not target or not target.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Campaign target is missing or inactive",
+        mark_campaign_failed(
+            db,
+            campaign_id=campaign_id,
+            organization_id=organization_id,
+            reason="Target missing or inactive",
         )
+        return
 
     mode_code = "basic"
     if target.connection_mode:
@@ -257,12 +288,14 @@ def run_campaign(
     }
 
     if not open_st or "high" not in severities or "prompt_injection_direct" not in categories:
-        raise HTTPException(
-            status_code=500,
-            detail="Finding catalogs not seeded (statuses, severities, categories)",
+        mark_campaign_failed(
+            db,
+            campaign_id=campaign_id,
+            organization_id=organization_id,
+            reason="Finding catalogs not seeded",
         )
+        return
 
-    # Resolve attack documents for complete mode
     doc_ids: list[int] = []
     if c.config_json:
         try:
@@ -282,13 +315,11 @@ def run_campaign(
         if doc_ids:
             q = q.filter(AttackDocument.attack_document_id.in_(doc_ids))
         else:
-            # Default arsenal: global docs (+ org docs)
             q = q.filter(
                 (AttackDocument.scope == "global")
-                | (AttackDocument.organization_id == membership.organization_id)
+                | (AttackDocument.organization_id == organization_id)
             )
-        docs = q.all()
-        for d in docs:
+        for d in q.all():
             cat_code = d.category.category_code if d.category else "prompt_injection_indirect"
             content, canary = payload_bytes_for_document(
                 technique=d.technique,
@@ -308,7 +339,8 @@ def run_campaign(
 
     now = datetime.now(timezone.utc)
     c.campaign_status_id = running.campaign_status_id
-    c.started_at = now
+    if not c.started_at:
+        c.started_at = now
     c.progress_percent = 10
     db.commit()
 
@@ -320,10 +352,9 @@ def run_campaign(
         documents=payloads or None,
     )
 
-    c = _load_campaign(db, campaign_id, membership.organization_id)
+    c = _load_campaign(db, campaign_id, organization_id)
     total = max(len(results), 1)
     http_ok = 0
-    findings_n = 0
 
     for i, result in enumerate(results):
         c.progress_percent = min(90, 10 + int(80 * (i + 1) / total))
@@ -361,22 +392,19 @@ def run_campaign(
                 canary_found=canary,
             )
         )
-        findings_n += 1
 
-    # No probe ran (empty scopes) or every request failed → failed campaign
     if not results:
         c.campaign_status_id = failed.campaign_status_id
         c.progress_percent = 100
         c.finished_at = datetime.now(timezone.utc)
         db.commit()
-        return get_campaign(db, membership=membership, campaign_id=campaign_id)
+        return
 
     if http_ok == 0:
         c.campaign_status_id = failed.campaign_status_id
         c.progress_percent = 100
         c.finished_at = datetime.now(timezone.utc)
-        # Operational finding: target unreachable during attack
-        cat = categories.get("prompt_injection_direct") or next(iter(categories.values()))
+        cat = categories.get("prompt_injection_direct") or next(iter(categories.values()), None)
         sev = severities.get("medium") or severities.get("high")
         if cat and sev and open_st:
             err = next((r.error for r in results if r.error), "All probes failed")
@@ -387,8 +415,12 @@ def run_campaign(
                     severity_id=sev.severity_id,
                     finding_status_id=open_st.finding_status_id,
                     title="Campaign probes could not reach chat endpoint",
-                    description=f"All HTTP probes failed against {target.chat_endpoint}. Last error: {err}",
-                    recommendation="Verify chat_endpoint, auth headers, and network access from the API host.",
+                    description=(
+                        f"All HTTP probes failed against {target.chat_endpoint}. Last error: {err}"
+                    ),
+                    recommendation=(
+                        "Verify chat_endpoint, auth headers, and network access from the worker host."
+                    ),
                     priority_order=5,
                     query_used=None,
                     response_excerpt=err,
@@ -396,16 +428,69 @@ def run_campaign(
                 )
             )
         db.commit()
-        return get_campaign(db, membership=membership, campaign_id=campaign_id)
+        return
 
     c.campaign_status_id = completed.campaign_status_id
     c.progress_percent = 100
     c.finished_at = datetime.now(timezone.utc)
     db.commit()
+
+
+def run_campaign(
+    db: Session,
+    *,
+    membership: OrganizationMember,
+    campaign_id: int,
+) -> CampaignOut:
+    """Enqueue campaign on Redis/RQ, or run in-process if async is disabled / Redis down."""
+    from app.core.config import settings
+
+    c = _load_campaign(db, campaign_id, membership.organization_id)
+    current = c.status.status_code if c.status else ""
+    if current not in ("queued", "failed"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot run campaign in status '{current}' (need queued or failed)",
+        )
+
+    target = c.target
+    if not target or not target.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Campaign target is missing or inactive",
+        )
+
+    # Reset progress for re-runs from failed
+    queued = _status_row(db, "queued")
+    c.campaign_status_id = queued.campaign_status_id
+    c.progress_percent = 0
+    c.started_at = None
+    c.finished_at = None
+    db.commit()
+
+    use_async = getattr(settings, "campaign_async", True)
+    if use_async:
+        try:
+            from app.core.queue import enqueue_campaign_job
+
+            enqueue_campaign_job(campaign_id, membership.organization_id)
+            return get_campaign(db, membership=membership, campaign_id=campaign_id)
+        except Exception:
+            # Fallback: run sync so local demo still works without a worker
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "Redis/RQ enqueue failed; falling back to synchronous run"
+            )
+
+    execute_campaign_run(
+        db,
+        campaign_id=campaign_id,
+        organization_id=membership.organization_id,
+    )
     return get_campaign(db, membership=membership, campaign_id=campaign_id)
 
 
-# Backwards-compatible alias
 def run_campaign_stub(
     db: Session,
     *,
@@ -413,6 +498,8 @@ def run_campaign_stub(
     campaign_id: int,
 ) -> CampaignOut:
     return run_campaign(db, membership=membership, campaign_id=campaign_id)
+
+
 
 def rerun_campaign(
     db: Session,
