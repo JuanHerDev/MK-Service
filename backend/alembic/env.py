@@ -23,6 +23,7 @@ from app.models import (
     Severity,
     AttackDocument,
     Report,
+    ApiKey,
 )
 
 config = context.config
