@@ -1,36 +1,174 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MK Service — Frontend
 
-## Getting Started
+Aplicación web para operar auditorías RAG: panel, targets, campañas, hallazgos, payloads, reportes y API Keys.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Stack
+
+| Pieza | Tecnología |
+|-------|------------|
+| Framework | Next.js 16 (App Router) |
+| UI | React 19, TypeScript |
+| Estilos | Tailwind CSS v4 |
+| Iconos | lucide-react |
+| Auth cliente | JWT en `localStorage` + refresh automático |
+
+---
+
+## Requisitos
+
+- Node.js **20+**
+- Backend API en marcha (por defecto `http://127.0.0.1:8000`)
+
+---
+
+## Variables de entorno
+
+Crear `frontend/.env.local` (no commitear secretos; este solo expone URL pública):
+
+```env
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Sin barra final. En el navegador del usuario esa URL debe ser **alcanzable** (no uses el hostname Docker `backend` en el browser).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Arranque
 
-## Learn More
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+- App: http://localhost:3000  
+- API docs (backend): http://127.0.0.1:8000/docs  
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Otros scripts:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run build    # build de producción
+npm run start    # sirve el build
+npm run lint     # ESLint
+```
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Estructura
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```text
+frontend/
+  app/
+    (auth)/          # login, register
+    (app)/           # shell autenticado
+      dashboard/
+      targets/
+      campaigns/
+      findings/
+      documents/     # payloads + upload
+      reports/       # listado + descarga PDF
+      api-keys/      # crear / revelar una vez / revocar
+  components/        # app-shell, ui, etc.
+  lib/
+    api.ts           # fetch + refresh + downloadReport + uploadForm
+    auth.tsx         # sesión
+    types.ts
+    format.ts
+```
+
+Rutas de grupo `(app)` y `(auth)` usan **route groups** de Next (paréntesis): no aparecen en la URL; solo organizan layouts.
+
+---
+
+## Auth en el cliente
+
+1. `POST /api/v1/auth/login` → guarda `access_token` y `refresh_token` (`mk.access` / `mk.refresh`).  
+2. Cada request con `Authorization: Bearer …`.  
+3. Ante `401`, un solo refresh compartido; si falla → logout y redirect a `/login`.  
+4. Roles de escritura (owner, auditor, admin): `canWrite()` en `lib/auth.tsx`.
+
+---
+
+## Integración con la API
+
+| Helper | Uso |
+|--------|-----|
+| `api<T>(path, opts)` | JSON REST |
+| `uploadForm(path, FormData)` | Multipart (payloads) |
+| `downloadReport(id, filename?)` | Blob PDF con Bearer |
+
+Base: `NEXT_PUBLIC_API_URL` + `/api/v1`.
+
+---
+
+## Pantallas
+
+| Ruta | Capacidad |
+|------|-----------|
+| `/login`, `/register` | Acceso y alta de org |
+| `/dashboard` | KPIs básicos |
+| `/targets` | Alta, test de conectividad |
+| `/campaigns` | Crear, run, cancel, re-run; polling si `queued`/`running` |
+| `/findings` | Backlog, filtros |
+| `/documents` | Listado + **upload archivo** o texto → disco backend |
+| `/reports` | Generar + **descargar PDF** |
+| `/api-keys` | Alta (secreto una vez), listado, revocar |
+
+---
+
+## Flujo demo desde UI
+
+1. Register / Login  
+2. Target → mock `9000` en modo **complete** → Test  
+3. Payloads → Nuevo payload (archivo o canary en texto)  
+4. Campañas → lanzar (worker backend debe estar activo)  
+5. Hallazgos → revisar  
+6. Reportes → generar → botón **PDF**  
+7. API Keys → crear → copiar → (opcional) probar con curl  
+
+Mensaje tras Run: **encolada** (no “ejecutada”). El worker completa el trabajo.
+
+---
+
+## Docker
+
+Imagen multi-stage en `frontend/Dockerfile`. Compose inyecta `NEXT_PUBLIC_API_URL` en **build time** (Next embebe las `NEXT_PUBLIC_*`).
+
+```bash
+# desde la raíz
+docker compose build frontend
+docker compose up -d frontend
+```
+
+---
+
+## Troubleshooting
+
+| Síntoma | Causa / arreglo |
+|---------|------------------|
+| CORS / network error | Backend up; `CORS_ORIGINS` incluye el origin del front; URL en `.env.local` correcta |
+| 401 en todas las rutas | Token viejo → logout; mismo `JWT_SECRET` en backend |
+| 403 en listados | Usuario sin membership activa |
+| Campaña no avanza | Worker RQ; ver backend README |
+| Upload falla | Backend multipart; tamaño ≤ 2 MiB |
+| TS `string \| null` en clipboard | Usar variable local tras el guard (`secretValue`) |
+| Página lenta | Cargas paralelas; cache Next; no bloquea el MVP |
+
+---
+
+## Commits
+
+```text
+feat(frontend): ...
+fix(frontend): ...
+style(frontend): ...
+```
+
+---
+
+## Relación con el monorepo
+
+Vista general y arranque conjunto: [`../README.md`](../README.md).  
+API, worker y mock: [`../backend/README.md`](../backend/README.md).

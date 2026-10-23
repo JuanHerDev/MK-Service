@@ -1,24 +1,28 @@
 # MK Service
 
-Plataforma para **auditar sistemas de IA basados en RAG** frente a **Prompt Injection** (directo e indirecto) y **Data Leakage**.
+Plataforma cloud para **auditar sistemas RAG** frente a **Prompt Injection** (directo e indirecto) y **Data Leakage**.
 
-Detecta vulnerabilidades de forma automatizada (MVP con motor stub), genera un **backlog priorizado de recomendaciones** e **informes** de seguridad orientados a equipos técnicos y de negocio.
+Ejecuta campañas de ataque controladas contra el endpoint del cliente, genera **hallazgos priorizados**, **backlog de recomendaciones** e **informes PDF** (ejecutivo / técnico). Multi-organización (tenant), roles y automatización vía **API Keys**.
 
-> MVP v0.1 — circuito completo: auth, targets, campañas, hallazgos, payloads y reportes.
+> **MVP v0.2** — circuito real de punta a punta (motor de probes + cola RQ + storage + PDF).
+
+Documentación detallada:
+
+| Documento | Contenido |
+|-----------|-----------|
+| [`backend/README.md`](backend/README.md) | API, migraciones, worker, mock RAG, storage |
+| [`frontend/README.md`](frontend/README.md) | Next.js, rutas, auth, variables |
 
 ---
 
-## Qué incluye este repositorio
+## Monorepo
 
 | Ruta | Descripción |
 |------|-------------|
-| `backend/` | API REST (FastAPI, PostgreSQL, Alembic, JWT) |
-| `frontend/` | Aplicación web (Next.js 16, React 19, Tailwind v4) |
-| `docs/` | Documentación de producto, arquitectura e investigación |
-| `docker-compose.yml` | PostgreSQL + Redis para desarrollo local |
-
-- Backend → [`backend/README.md`](backend/README.md)
-- Frontend → [`frontend/README.md`](frontend/README.md)
+| `backend/` | FastAPI, SQLAlchemy, Alembic, RQ, motor de ataque |
+| `frontend/` | Next.js 16, React 19, Tailwind CSS v4 |
+| `docs/` | SRS, arquitectura, investigación, parcial BD (SQL Server) |
+| `docker-compose.yml` | postgres, redis, backend, worker, frontend |
 
 ---
 
@@ -26,18 +30,21 @@ Detecta vulnerabilidades de forma automatizada (MVP con motor stub), genera un *
 
 | Capa | Tecnología |
 |------|------------|
-| API | Python 3.12, FastAPI, SQLAlchemy 2, Alembic |
-| Base de datos | PostgreSQL 16 |
-| Cola / caché | Redis (infra lista; ejecución de campañas en MVP vía stub) |
-| Auth | JWT (access + refresh), bcrypt |
-| Frontend | Next.js, React, Tailwind CSS |
+| API | Python 3.12+, FastAPI, SQLAlchemy 2, Alembic |
+| BD app | PostgreSQL 16 |
+| Cola | Redis 7 + RQ |
+| Auth | JWT (access + refresh), bcrypt, API Keys (`X-API-Key`) |
+| Front | Next.js (App Router), TypeScript, Tailwind |
+| PDF | reportlab |
 | Contenedores | Docker Compose |
+
+> La BD académica (SQL Server, tríada CID, 20 tablas en español) es un entregable aparte documentado en `docs/`. La app de producto usa **PostgreSQL** en inglés.
 
 ---
 
 ## Requisitos
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (o Docker Engine + Compose)
+- Docker Desktop (o Engine + Compose)
 - Python 3.12+
 - Node.js 20+
 - Git
@@ -49,50 +56,50 @@ Detecta vulnerabilidades de forma automatizada (MVP con motor stub), genera un *
 ### 1. Clonar
 
 ```bash
-git clone https://github.com/JuanHerDev/MK-Service.git
+git clone <URL_DEL_REPO>
 cd MK-Service
 ```
 
 ### 2. Variables de entorno
 
-**No se sube `.env` al repo.** Copia plantillas:
+**No commits de `.env` con secretos.**
 
 ```bash
-# Backend (obligatorio para uvicorn / Alembic)
+# Backend (obligatorio)
 cp backend/.env.example backend/.env
+
+# Frontend
+cp frontend/.env.example frontend/.env.local   # si existe; si no, crea el archivo
+
+# Opcional: .env en la raíz para docker compose (POSTGRES_*, puertos)
 ```
 
-Edita `backend/.env`:
+**`backend/.env`** (uvicorn en el host + Postgres en Docker):
 
 ```env
 DATABASE_URL=postgresql+psycopg2://mk_user:TU_PASSWORD@localhost:5432/mk_service
-JWT_SECRET_KEY=genera_con_python_-c_"import secrets; print(secrets.token_hex(32))"
-POSTGRES_USER=mk_user
-POSTGRES_PASSWORD=TU_PASSWORD
-POSTGRES_DB=mk_service
+REDIS_URL=redis://localhost:6379/0
+JWT_SECRET_KEY=<python -c "import secrets; print(secrets.token_hex(32))">
+CAMPAIGN_ASYNC=true
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+STORAGE_PATH=storage
 ```
 
-- Con **uvicorn en el PC** y Postgres en Docker → host **`localhost`**
-- Password sin caracteres problemáticos en URL (`@ ? #`) o URL-encoded
-
-**Frontend** (`frontend/.env.local`):
+**`frontend/.env.local`:**
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 ```
 
-Si usas `docker compose` con un `.env` en la **raíz**, alinea `POSTGRES_*` con el mismo password.
+Alinea `POSTGRES_USER` / `PASSWORD` / `DB` entre raíz (Compose) y `DATABASE_URL`. Evita `?` `@` `#` en el password o codifícalos en la URL.
 
-### 3. Infra (Postgres + Redis)
+### 3. Infraestructura
 
 ```bash
 docker compose up -d postgres redis
 docker compose ps
-# Esperar a que Postgres acepte conexiones:
 docker exec mk_postgres pg_isready -U mk_user -d mk_service
 ```
-
-(Si el contenedor tiene otro nombre: `docker ps`.)
 
 ### 4. Backend
 
@@ -104,18 +111,51 @@ python -m venv venv
 .\venv\Scripts\Activate.ps1
 
 # Linux / macOS
-source venv/bin/activate
+# source venv/bin/activate
 
 pip install -r requirements.txt
 alembic upgrade head
 python scripts/seed_catalogs.py
+python scripts/ensure_payload_files.py
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-- API docs: http://127.0.0.1:8000/docs  
+- Swagger: http://127.0.0.1:8000/docs  
 - Health: http://127.0.0.1:8000/health  
 
-### 5. Frontend
+### 5. Worker RQ (obligatorio si `CAMPAIGN_ASYNC=true`)
+
+**Windows (lab):**
+
+```powershell
+cd backend
+.\venv\Scripts\Activate.ps1
+$env:PYTHONPATH = (Get-Location).Path
+rq worker mk_campaigns --url redis://localhost:6379/0 --worker-class app.workers.windows_worker.WindowsWorker
+```
+
+**Linux / macOS:**
+
+```bash
+cd backend && source venv/bin/activate
+export PYTHONPATH=$(pwd)
+rq worker mk_campaigns --url redis://localhost:6379/0
+```
+
+Debe mostrar: `*** Listening on mk_campaigns...`
+
+Detalle: [`backend/README.md`](backend/README.md).
+
+### 6. Mock RAG (demo de ataques)
+
+```bash
+cd backend
+uvicorn mock_chat:app --reload --port 9000
+```
+
+Health: http://127.0.0.1:9000/health  
+
+### 7. Frontend
 
 ```bash
 cd frontend
@@ -123,92 +163,80 @@ npm install
 npm run dev
 ```
 
-Abre http://localhost:3000
+UI: http://localhost:3000  
 
-### 6. Primera cuenta
+### 8. Primera cuenta
 
-1. Ve a **http://localhost:3000/register**
-2. Crea organización + usuario (rol **Owner**)
-3. O usa Swagger: `POST /api/v1/auth/register`
-
-```json
-{
-  "email": "owner@empresa.com",
-  "password": "passwordsegura",
-  "full_name": "Demo Owner",
-  "organization_name": "Demo Org"
-}
-```
+1. http://localhost:3000/register — organización + usuario **Owner**, o  
+2. `POST /api/v1/auth/register` en Swagger.
 
 ---
 
-## Flujo demo (MVP)
+## Checklist demo (5–8 min)
 
-1. Login / Register  
-2. **Targets** → registrar endpoint (ej. `https://httpbin.org/get`) → Probar conexión  
-3. **Campañas** → crear → Run → (opcional) Rerun  
-4. **Hallazgos** → estado y comentarios  
-5. **Payloads** → listar globales / org  
-6. **Reportes** → listar o generar desde campaña  
+1. Login  
+2. **Targets** → mode `complete`, chat `http://127.0.0.1:9000/chat`, upload `http://127.0.0.1:9000/upload`, auth `none` → Test OK  
+3. **Payloads** → subir archivo o texto con canary (opcional)  
+4. **Campañas** → crear + ejecutar → worker procesa → `completed`  
+5. **Hallazgos** → severidades / canaries  
+6. **Reportes** → generar PDF → descargar  
+7. **API Keys** → crear, copiar secreto, probar `X-API-Key`, revocar  
 
-> El motor de ataque del MVP es **stub**: genera hallazgos de demostración. Los PDF reales y el ataque real son post-MVP.
+Si la campaña se queda en `queued`: worker apagado o Redis caído.
 
 ---
 
-## Worker de campañas (producción)
+## Módulos de la UI
 
-Las campañas no se ejecutan dentro del request HTTP. Un proceso **worker (RQ)** consume la cola Redis.
+| Ruta | Función |
+|------|---------|
+| `/dashboard` | Resumen |
+| `/targets` | Sistemas RAG auditados |
+| `/campaigns` | Lanzar / re-run / cancelar |
+| `/findings` | Backlog de vulnerabilidades |
+| `/documents` | Payloads (upload a disco) |
+| `/reports` | PDF ejecutivo / técnico |
+| `/api-keys` | Claves de automatización |
 
-En producción / Docker el worker es **persistente** (no se lanza a mano en cada demo):
+---
+
+## Docker (opcional, más cercano a prod)
 
 ```bash
-docker compose up -d postgres redis backend worker
+docker compose build
+docker compose up -d postgres redis backend worker frontend
 docker compose logs -f worker
 ```
 
-Detalle, Windows local y variables: backend/README.md → sección Worker RQ.
+Dentro de Compose, `DATABASE_URL` y `REDIS_URL` usan hosts `postgres` y `redis` (no `localhost`).
 
 ---
 
-## Scripts útiles
+## Commits
 
-```bash
-# Solo infra
-docker compose up -d postgres redis
-
-# Rebuild imágenes (si usas backend/frontend en Compose)
-docker compose build
-
-# Seed de catálogos (roles, estados, modos, severidades, docs globales)
-cd backend && python scripts/seed_catalogs.py
-```
-
----
-
-## Estructura de commits
-
-Conventional Commits, con scope cuando aplica:
+[Conventional Commits](https://www.conventionalcommits.org/) con scope:
 
 ```text
+feat(backend): ...
 feat(frontend): ...
-fix(backend): ...
-chore: ...
+fix(worker): ...
 docs: ...
+chore: ...
 ```
 
 ---
 
 ## Versión
 
-MVP presentable: **v0.1.0**.
+Tag sugerido tras MVP demostrable:
 
 ```bash
-git tag -a v0.1.0 -m "MVP presentable: auth, targets, campaigns, findings, reports"
-git push origin v0.1.0
+git tag -a v0.2.0 -m "MVP: real attack engine, RQ worker, PDF, API keys, upload UI"
+git push origin v0.2.0
 ```
 
 ---
 
-## Licencia / equipo
+## Equipo / uso
 
-Uso académico y desarrollo del producto MK Service (ETITC / equipo del proyecto).
+Proyecto académico-comercial (ETITC) — MK Service. Uso interno del equipo y demos controladas.
