@@ -15,13 +15,15 @@ class AttackDocumentCreate(BaseModel):
     ]
     scope: Literal["global", "organization"] = "organization"
     file_name: str = Field(min_length=1, max_length=255)
-    storage_path: str = Field(min_length=1, max_length=500)
+    # Optional: server assigns path under storage/ when content is provided
+    storage_path: str | None = Field(default=None, max_length=500)
     size_bytes: int | None = Field(default=None, ge=0)
     doc_version: str | None = Field(default=None, max_length=20)
+    # Optional inline content (UTF-8 text). Written to disk on create.
+    content_text: str | None = Field(default=None, max_length=200_000)
 
     @model_validator(mode="after")
     def global_only_admin_later(self) -> "AttackDocumentCreate":
-        # organization docs always need org from membership; global reserved for platform admin
         return self
 
 

@@ -2,6 +2,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.storage import payload_relative_path, write_payload
 from app.models.attack_document import AttackDocument
 from app.models.finding import AttackCategory
 from app.models.organization import OrganizationMember
@@ -31,11 +32,10 @@ def list_documents(
     db: Session,
     *,
     membership: OrganizationMember,
-    scope: str | None = None,  # global | organization | None = both visible
+    scope: str | None = None,
     page: int = 1,
     per_page: int = 20,
 ) -> tuple[list[AttackDocumentOut], int]:
-    """Globals + docs de la organización del usuario."""
     q = (
         db.query(AttackDocument)
         .options(joinedload(AttackDocument.category))
@@ -71,6 +71,7 @@ def create_document(
     membership: OrganizationMember,
     user: User,
     data: AttackDocumentCreate,
+    content_bytes: bytes | None = None,
 ) -> AttackDocumentOut:
     cat = (
         db.query(AttackCategory)
@@ -88,6 +89,28 @@ def create_document(
 
     org_id = None if data.scope == "global" else membership.organization_id
 
+    storage_path = data.storage_path
+    size_bytes = data.size_bytes
+
+    raw = content_bytes
+    if raw is None and data.content_text is not None:
+        raw = data.content_text.encode("utf-8")
+
+    if raw is not None:
+        rel = payload_relative_path(
+            scope=data.scope,
+            organization_id=org_id,
+            file_name=data.file_name,
+        )
+        storage_path, size_bytes = write_payload(relative_path=rel, content=raw)
+    elif not storage_path:
+        # Metadata-only: placeholder path; engine falls back to technique templates
+        storage_path = payload_relative_path(
+            scope=data.scope,
+            organization_id=org_id,
+            file_name=data.file_name,
+        )
+
     doc = AttackDocument(
         organization_id=org_id,
         attack_category_id=cat.attack_category_id,
@@ -96,8 +119,8 @@ def create_document(
         technique=data.technique,
         scope=data.scope,
         file_name=data.file_name,
-        storage_path=data.storage_path,
-        size_bytes=data.size_bytes,
+        storage_path=storage_path,
+        size_bytes=size_bytes,
         doc_version=data.doc_version or "1.0",
         is_active=True,
         created_by=user.user_id,

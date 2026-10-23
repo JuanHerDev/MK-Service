@@ -364,11 +364,11 @@ def payload_bytes_for_document(
     storage_path: str | None = None,
 ) -> tuple[bytes, str]:
     """Return (content, canary_expected). Prefer on-disk file if present."""
-    from pathlib import Path
+    from app.core.storage import resolve_path
 
     if storage_path:
-        p = Path(storage_path)
-        if p.is_file():
+        p = resolve_path(storage_path)
+        if p is not None and p.is_file():
             data = p.read_bytes()
             text = data.decode("utf-8", errors="replace")
             canary = CANARY_INDIRECT
