@@ -3,6 +3,7 @@
 import {
   Crosshair,
   FileText,
+  KeyRound,
   LayoutGrid,
   LogOut,
   Menu,
@@ -26,6 +27,7 @@ const NAV = [
   { href: "/findings", label: "Hallazgos", code: "03", icon: ShieldAlert },
   { href: "/documents", label: "Payloads", code: "04", icon: Syringe },
   { href: "/reports", label: "Reportes", code: "05", icon: FileText },
+  { href: "/api-keys", label: "API Keys", code: "06", icon: KeyRound },
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
