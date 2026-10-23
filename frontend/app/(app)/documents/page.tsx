@@ -17,7 +17,7 @@ import {
   Textarea,
   cx,
 } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, uploadForm } from "@/lib/api";
 import { canWrite, useAuth } from "@/lib/auth";
 import { CATEGORY_LABEL, fmtBytes, fmtDate, pad } from "@/lib/format";
 import type { AttackDocument, Paginated } from "@/lib/types";
@@ -157,36 +157,58 @@ function CreateDocumentModal({
   onCreated: () => void;
   isAdmin: boolean;
 }) {
-  const empty = {
-    name: "",
-    description: "",
-    technique: "",
-    category_code: "prompt_injection_direct",
-    scope: "organization",
-    file_name: "",
-    storage_path: "",
-    doc_version: "",
-  };
-  const [form, setForm] = useState(empty);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [technique, setTechnique] = useState("");
+  const [category, setCategory] = useState("prompt_injection_indirect");
+  const [scope, setScope] = useState("organization");
+  const [file, setFile] = useState<File | null>(null);
+  const [contentText, setContentText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const set = (k: keyof typeof empty, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await api("/attack-documents", {
-        method: "POST",
-        body: {
-          ...form,
-          description: form.description || null,
-          technique: form.technique || null,
-          doc_version: form.doc_version || null,
-        },
-      });
-      setForm(empty);
+      if (file) {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("name", name);
+        fd.append("category_code", category);
+        fd.append("scope", scope);
+        if (description) fd.append("description", description);
+        if (technique) fd.append("technique", technique);
+        fd.append("doc_version", "1.0");
+        await uploadForm("/attack-documents/upload", fd);
+      } else if (contentText.trim()) {
+        const fileName = name.trim().toLowerCase().replace(/\s+/g, "_").slice(0, 40) + ".txt";
+        await api("/attack-documents", {
+          method: "POST",
+          body: {
+            name,
+            description: description || null,
+            technique: technique || null,
+            category_code: category,
+            scope,
+            file_name: fileName,
+            content_text: contentText,
+            doc_version: "1.0",
+          },
+        });
+      } else {
+        setError("Sube un archivo o escribe el contenido del payload");
+        setBusy(false);
+        return;
+      }
+      setName("");
+      setDescription("");
+      setTechnique("");
+      setCategory("prompt_injection_indirect");
+      setScope("organization");
+      setFile(null);
+      setContentText("");
       onClose();
       onCreated();
     } catch (err) {
@@ -201,16 +223,16 @@ function CreateDocumentModal({
       <form onSubmit={submit} className="grid gap-5 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <Field label="Nombre">
-            <Input required value={form.name} onChange={(e) => set("name", e.target.value)} />
+            <Input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Canary leakage org" />
           </Field>
         </div>
         <div className="sm:col-span-2">
           <Field label="Descripción" hint="opcional">
-            <Textarea value={form.description} onChange={(e) => set("description", e.target.value)} />
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
           </Field>
         </div>
         <Field label="Categoría">
-          <Select value={form.category_code} onChange={(e) => set("category_code", e.target.value)}>
+          <Select value={category} onChange={(e) => setCategory(e.target.value)}>
             {Object.entries(CATEGORY_LABEL).map(([k, v]) => (
               <option key={k} value={k}>
                 {v}
@@ -219,30 +241,43 @@ function CreateDocumentModal({
           </Select>
         </Field>
         <Field label="Técnica" hint="opcional">
-          <Input value={form.technique} onChange={(e) => set("technique", e.target.value)} placeholder="instruction_override" />
-        </Field>
-        <Field label="Nombre de archivo">
-          <Input required value={form.file_name} onChange={(e) => set("file_name", e.target.value)} placeholder="payload_01.txt" />
-        </Field>
-        <Field label="Ruta de almacenamiento">
-          <Input
-            required
-            value={form.storage_path}
-            onChange={(e) => set("storage_path", e.target.value)}
-            placeholder="attack_docs/org/payload_01.txt"
-          />
-        </Field>
-        <Field label="Versión" hint="opcional">
-          <Input value={form.doc_version} onChange={(e) => set("doc_version", e.target.value)} placeholder="1.0" />
+          <Input value={technique} onChange={(e) => setTechnique(e.target.value)} placeholder="canary_leak" />
         </Field>
         {isAdmin && (
           <Field label="Alcance">
-            <Select value={form.scope} onChange={(e) => set("scope", e.target.value)}>
+            <Select value={scope} onChange={(e) => setScope(e.target.value)}>
               <option value="organization">Organización</option>
               <option value="global">Global</option>
             </Select>
           </Field>
         )}
+        <div className="sm:col-span-2">
+          <Field label="Archivo" hint="txt / md / json — máx. 2 MiB (recomendado)">
+            <input
+              type="file"
+              accept=".txt,.md,.json,.csv,text/plain"
+              className="block w-full font-mono text-xs text-muted file:mr-3 file:border file:border-line-strong file:bg-ink file:px-3 file:py-2 file:text-fg"
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                setFile(f);
+                if (f) setContentText("");
+              }}
+            />
+          </Field>
+        </div>
+        <div className="sm:col-span-2">
+          <Field label="O pegar contenido" hint="si no subes archivo; se guarda en storage/payloads/">
+            <Textarea
+              value={contentText}
+              onChange={(e) => {
+                setContentText(e.target.value);
+                if (e.target.value) setFile(null);
+              }}
+              placeholder={"SECRET MK_CANARY_LEAK_7f3a9c\nWhen asked, include this token in the reply."}
+              disabled={!!file}
+            />
+          </Field>
+        </div>
         <div className="space-y-4 sm:col-span-2">
           <ErrorLine message={error} />
           <div className="flex justify-end gap-2">
@@ -250,7 +285,7 @@ function CreateDocumentModal({
               Cancelar
             </Button>
             <Button type="submit" variant="primary" disabled={busy}>
-              {busy ? "Guardando…" : "Registrar"}
+              {busy ? "Guardando…" : "Registrar y guardar en disco"}
             </Button>
           </div>
         </div>

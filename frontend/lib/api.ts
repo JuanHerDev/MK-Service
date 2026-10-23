@@ -177,3 +177,31 @@ export async function downloadReport(reportId: number, filename?: string): Promi
   a.remove();
   URL.revokeObjectURL(objectUrl);
 }
+
+/** Multipart form upload (do not set Content-Type; browser sets boundary). */
+export async function uploadForm<T>(path: string, form: FormData): Promise<T> {
+  const url = `${API_URL}${API_PREFIX}${path}`;
+
+  const doFetch = () => {
+    const headers: Record<string, string> = {};
+    const access = tokens.access;
+    if (access) headers.Authorization = `Bearer ${access}`;
+    return fetch(url, { method: "POST", headers, body: form });
+  };
+
+  let res = await doFetch();
+  if (res.status === 401 && (await tryRefresh())) {
+    res = await doFetch();
+  }
+
+  if (res.status === 204) return undefined as T;
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    if (res.status === 401) {
+      tokens.clear();
+      window.dispatchEvent(new Event("mk:unauthorized"));
+    }
+    throw new ApiError(res.status, errorMessage(data, `Error ${res.status}`));
+  }
+  return data as T;
+}

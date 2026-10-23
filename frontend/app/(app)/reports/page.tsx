@@ -320,7 +320,7 @@ function GenerateReportModal({
     <Modal open={open} onClose={onClose} title="Generar reporte" code="RPT+">
       <form onSubmit={submit} className="space-y-5">
         <p className="text-sm text-muted">
-          MVP: se crea un registro de informe (stub). El PDF real llegará en una iteración posterior.
+          Se genera un PDF real (ejecutivo o técnico) con los hallazgos de la campaña y queda disponible para descarga.
         </p>
 
         <Field label="Campaña">

@@ -59,6 +59,16 @@ export default function CampaignsPage() {
     return out;
   }, [campaigns]);
 
+  // Poll while any campaign is queued or running (async RQ worker)
+  useEffect(() => {
+    const active = campaigns.some((c) => c.status === "queued" || c.status === "running");
+    if (!active) return;
+    const id = window.setInterval(() => {
+      void reload();
+    }, 2500);
+    return () => window.clearInterval(id);
+  }, [campaigns, reload]);
+
   async function act(id: number, fn: () => Promise<unknown>, done?: string) {
     setBusyId(id);
     setActionError(null);
@@ -189,7 +199,7 @@ export default function CampaignsPage() {
                                   act(
                                     c.campaign_id,
                                     () => api(`/campaigns/${c.campaign_id}/run`, { method: "POST" }),
-                                    `Campaña #${c.campaign_id} ejecutada`,
+                                    `Campaña #${c.campaign_id} encolada — el worker la procesará`,
                                   )
                                 }
                               >
@@ -355,7 +365,11 @@ function CampaignModal({
       if (form.run_now) await api(`/campaigns/${created.campaign_id}/run`, { method: "POST" });
       setForm((f) => ({ ...f, name: "", document_ids: [] }));
       onClose();
-      onDone(form.run_now ? `Campaña "${created.name}" ejecutada` : `Campaña "${created.name}" en cola`);
+      onDone(
+        form.run_now
+          ? `Campaña "${created.name}" encolada — revisa que el worker RQ esté activo`
+          : `Campaña "${created.name}" creada (queued)`,
+      );
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -484,7 +498,7 @@ function RerunModal({
       const created = await api<Campaign>(`/campaigns/${campaign.campaign_id}/rerun`, { method: "POST", body });
       if (runNow) await api(`/campaigns/${created.campaign_id}/run`, { method: "POST" });
       onClose();
-      onDone(`Re-run #${created.campaign_id} ${runNow ? "ejecutado" : "en cola"}`);
+      onDone(`Re-run #${created.campaign_id} ${runNow ? "encolado — espera al worker" : "en cola"}`);
     } catch (err) {
       setError((err as Error).message);
     } finally {
