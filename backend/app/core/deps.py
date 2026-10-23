@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session, joinedload
 
@@ -7,7 +7,7 @@ from app.core.security import safe_decode_token
 from app.models.organization import OrganizationMember
 from app.models.user import User
 
-bearer_scheme = HTTPBearer(auto_error=True)
+bearer_scheme = HTTPBearer(auto_error=False)
 
 # Roles that can mutate targets / campaigns
 WRITE_ROLES = frozenset({"owner", "auditor", "admin"})
@@ -15,9 +15,34 @@ READ_ROLES = frozenset({"owner", "auditor", "viewer", "admin"})
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
     db: Session = Depends(get_db),
 ) -> User:
+    """JWT Bearer or X-API-Key (resolves to the key creator user)."""
+    if x_api_key:
+        from app.services.api_key_service import resolve_api_key
+
+        _key, membership = resolve_api_key(db, x_api_key)
+        user = (
+            db.query(User)
+            .options(joinedload(User.status), joinedload(User.memberships))
+            .filter(User.user_id == membership.user_id)
+            .first()
+        )
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="API key user not found",
+            )
+        return user
+
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Authorization Bearer token or X-API-Key",
+        )
+
     payload = safe_decode_token(credentials.credentials)
     if not payload or payload.get("type") != "access":
         raise HTTPException(
@@ -59,10 +84,16 @@ def get_current_user(
 
 def get_active_membership(
     current_user: User = Depends(get_current_user),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
     db: Session = Depends(get_db),
 ) -> OrganizationMember:
+    if x_api_key:
+        from app.services.api_key_service import resolve_api_key
+
+        _key, membership = resolve_api_key(db, x_api_key)
+        return membership
+
     if current_user.is_platform_admin:
-        # Platform admin may not have a tenant membership; callers should handle org_id explicitly.
         membership = (
             db.query(OrganizationMember)
             .options(

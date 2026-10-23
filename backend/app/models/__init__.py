@@ -6,6 +6,7 @@ from app.models.campaign import Campaign, CampaignStatus
 from app.models.finding import AttackCategory, Finding, FindingStatus, Severity, FindingComment
 from app.models.attack_document import AttackDocument
 from app.models.report import Report
+from app.models.api_key import ApiKey
 
 __all__ = [
     "Role",
@@ -25,4 +26,5 @@ __all__ = [
     "FindingComment",
     "AttackDocument",
     "Report",
+    "ApiKey",
 ]
