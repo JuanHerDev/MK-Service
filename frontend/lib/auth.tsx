@@ -109,3 +109,8 @@ export function canWrite(user: Me | null) {
   const role = user?.membership?.role_code ?? "";
   return ["owner", "auditor", "admin"].includes(role);
 }
+
+export function canManageMembers(user: Me | null) {
+  const role = user?.membership?.role_code ?? "";
+  return role === "owner" || role === "admin" || !!user?.is_platform_admin;
+}
