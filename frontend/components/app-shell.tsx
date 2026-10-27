@@ -11,6 +11,7 @@ import {
   ShieldAlert,
   Syringe,
   Users,
+  ScrollText,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -30,6 +31,7 @@ const NAV = [
   { href: "/reports", label: "Reportes", code: "05", icon: FileText },
   { href: "/api-keys", label: "API Keys", code: "06", icon: KeyRound },
   { href: "/members", label: "Miembros", code: "07", icon: Users },
+  { href: "/audit", label: "Auditoría", code: "08", icon: ScrollText },
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
