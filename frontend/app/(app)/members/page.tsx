@@ -1,7 +1,7 @@
 "use client";
 
-import { Copy, UserCog, UserMinus, UserPlus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Copy, ScrollText, UserCog, UserMinus, UserPlus } from "lucide-react";
+import { useState } from "react";
 import {
   Badge,
   Button,
@@ -128,9 +128,16 @@ export default function MembersPage() {
         subtitle="Organización"
         title="Miembros"
         actions={
-          <Button variant="primary" onClick={() => setInviting(true)}>
-            <UserPlus className="size-4" /> Invitar
-          </Button>
+          <div className="flex gap-2">
+            <a href="/audit">
+              <Button type="button">
+                <ScrollText className="size-4" /> Historial
+              </Button>
+            </a>
+            <Button variant="primary" onClick={() => setInviting(true)}>
+              <UserPlus className="size-4" /> Invitar
+            </Button>
+          </div>
         }
       />
 
@@ -375,30 +382,23 @@ function InviteModal({
 
 function RevealLinkModal({ token, onClose }: { token: string | null; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
-  const [link, setLink] = useState("");
-
-  useEffect(() => {
-    if (!token) {
-      setLink("");
-      return;
-    }
-    setLink(`${window.location.origin}/accept-invite?token=${encodeURIComponent(token)}`);
-    setCopied(false);
-  }, [token]);
 
   if (!token) return null;
 
+  const displayLink =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/accept-invite?token=${encodeURIComponent(token)}`
+      : "";
+
   async function copyLink() {
-    const value = link || `${window.location.origin}/accept-invite?token=${encodeURIComponent(token)}`;
+    if (!displayLink) return;
     try {
-      await navigator.clipboard.writeText(value);
+      await navigator.clipboard.writeText(displayLink);
       setCopied(true);
     } catch {
       setCopied(false);
     }
   }
-
-  const displayLink = link || "";
 
   return (
     <Modal open={!!token} onClose={onClose} title="Enlace de invitación" code="INV+">

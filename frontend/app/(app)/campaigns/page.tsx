@@ -1,8 +1,8 @@
 "use client";
 
-import { FileText, Play, Plus, RotateCcw, ShieldAlert, Square } from "lucide-react";
+import { FileText, Play, Plus, RotateCcw, ShieldAlert, Square, Activity } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   Badge,
   Button,
@@ -42,6 +42,46 @@ export default function CampaignsPage() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [queueInfo, setQueueInfo] = useState<{
+    redis_ok: boolean;
+    queued_jobs: number;
+    workers_count: number;
+    status: string;
+    message: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function pullQueue() {
+      try {
+        const q = await api<{
+          redis_ok: boolean;
+          queued_jobs: number;
+          workers_count: number;
+          status: string;
+          message: string;
+        }>("/system/queue");
+        if (!cancelled) setQueueInfo(q);
+      } catch {
+        if (!cancelled)
+          setQueueInfo({
+            redis_ok: false,
+            queued_jobs: 0,
+            workers_count: 0,
+            status: "unavailable",
+            message: "No se pudo consultar la cola",
+          });
+      }
+    }
+    void pullQueue();
+    const id = window.setInterval(() => void pullQueue(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
 
   const wantsNew = useQueryParam("new");
   useEffect(() => {
@@ -98,6 +138,29 @@ export default function CampaignsPage() {
           )
         }
       />
+
+      {queueInfo && (
+        <Panel className="mb-4">
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <Activity className="size-4 text-accent" />
+            <span className="font-mono text-[10px] tracking-[0.14em] text-dim uppercase">Cola RQ</span>
+            <Badge
+              value={queueInfo.status}
+              tone={
+                queueInfo.status === "healthy"
+                  ? "ok"
+                  : queueInfo.status === "no_workers"
+                    ? "medium"
+                    : "critical"
+              }
+            />
+            <span className="text-muted">{queueInfo.message}</span>
+            <span className="font-mono text-xs text-dim">
+              jobs={queueInfo.queued_jobs} · workers={queueInfo.workers_count}
+            </span>
+          </div>
+        </Panel>
+      )}
 
       <div className="mb-4 flex flex-wrap gap-px border border-line bg-line">
         {FILTERS.map((f) => (
@@ -159,10 +222,22 @@ export default function CampaignsPage() {
                   {shown.map((c) => {
                     const busy = busyId === c.campaign_id;
                     return (
-                      <tr key={c.campaign_id} className="transition hover:bg-white/[0.02]">
+                      <Fragment key={c.campaign_id}>
+                      <tr className="transition hover:bg-white/[0.02]">
                         <td className="px-4 py-3 font-mono text-[11px] text-dim">#{pad(c.campaign_id, 3)}</td>
                         <td className="px-4 py-3">
-                          <p>{c.name}</p>
+                          <button
+                            type="button"
+                            className="text-left hover:text-accent"
+                            onClick={() =>
+                              setExpandedId((id) => (id === c.campaign_id ? null : c.campaign_id))
+                            }
+                          >
+                            <p>{c.name}</p>
+                            <p className="font-mono text-[10px] text-dim">
+                              {expandedId === c.campaign_id ? "ocultar timeline ▲" : "ver timeline ▼"}
+                            </p>
+                          </button>
                           {c.parent_campaign_id && (
                             <p className="font-mono text-[10px] text-dim">re-run de #{pad(c.parent_campaign_id, 3)}</p>
                           )}
@@ -252,6 +327,14 @@ export default function CampaignsPage() {
                           </div>
                         </td>
                       </tr>
+                      {expandedId === c.campaign_id && (
+                        <tr className="bg-white/[0.02]">
+                          <td colSpan={8} className="px-4 py-4">
+                            <CampaignTimeline c={c} />
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -279,6 +362,69 @@ export default function CampaignsPage() {
         }}
       />
     </>
+  );
+}
+
+
+function CampaignTimeline({ c }: { c: Campaign }) {
+  const steps = [
+    {
+      key: "created",
+      label: "Creada",
+      done: true,
+      at: c.created_at,
+    },
+    {
+      key: "queued",
+      label: "En cola",
+      done: ["queued", "running", "completed", "failed", "cancelled"].includes(c.status),
+      at: c.status === "queued" ? c.created_at : c.started_at || c.created_at,
+    },
+    {
+      key: "running",
+      label: "Ejecutando",
+      done: ["running", "completed", "failed"].includes(c.status) || c.progress_percent > 0,
+      at: c.started_at,
+    },
+    {
+      key: "probes",
+      label: "Probes / hallazgos",
+      done: c.progress_percent >= 50 || ["completed", "failed"].includes(c.status),
+      at: c.started_at,
+    },
+    {
+      key: "done",
+      label: c.status === "failed" ? "Fallida" : c.status === "cancelled" ? "Cancelada" : "Completada",
+      done: ["completed", "failed", "cancelled"].includes(c.status),
+      at: c.finished_at,
+    },
+  ];
+
+  return (
+    <div>
+      <p className="mb-3 font-mono text-[10px] tracking-[0.14em] text-dim uppercase">
+        Timeline · progreso {c.progress_percent}%
+      </p>
+      <ol className="flex flex-wrap gap-2">
+        {steps.map((s, i) => (
+          <li
+            key={s.key}
+            className={cx(
+              "flex min-w-[120px] flex-1 flex-col border px-3 py-2",
+              s.done ? "border-accent/40 bg-accent/5" : "border-line bg-black/20 opacity-50",
+            )}
+          >
+            <span className="font-mono text-[10px] text-dim">
+              {String(i + 1).padStart(2, "0")}
+            </span>
+            <span className={cx("text-sm", s.done ? "text-fg" : "text-muted")}>{s.label}</span>
+            <span className="mt-1 font-mono text-[10px] text-muted">
+              {s.at ? fmtDate(s.at) : "—"}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
 

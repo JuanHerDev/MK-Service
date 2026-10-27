@@ -1,7 +1,7 @@
 "use client";
 
-import { Filter, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Download, Filter, RefreshCw } from "lucide-react";
+import { useMemo, useState } from "react";
 import {
   Badge,
   Button,
@@ -17,6 +17,7 @@ import {
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { fmtDate, pad } from "@/lib/format";
+import { useResource } from "@/lib/use-resource";
 
 type AuditEvent = {
   audit_event_id: number;
@@ -39,8 +40,15 @@ type Actor = {
   is_active: boolean;
 };
 
+type Filters = {
+  action: string;
+  actorUserId: string;
+  email: string;
+  dateFrom: string;
+  dateTo: string;
+};
+
 const ACTION_OPTIONS = [
-  "",
   "invite.created",
   "invite.revoked",
   "invite.accepted",
@@ -58,57 +66,93 @@ function canViewAudit(role: string | undefined, isAdmin: boolean | undefined) {
   return role === "owner" || role === "auditor" || role === "admin";
 }
 
+const EMPTY_FILTERS: Filters = {
+  action: "",
+  actorUserId: "",
+  email: "",
+  dateFrom: "",
+  dateTo: "",
+};
+
 export default function AuditPage() {
   const { user } = useAuth();
   const role = user?.membership?.role_code;
   const allowed = canViewAudit(role, user?.is_platform_admin);
 
-  const [events, setEvents] = useState<AuditEvent[]>([]);
-  const [actors, setActors] = useState<Actor[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const [action, setAction] = useState("");
-  const [actorUserId, setActorUserId] = useState("");
-  const [email, setEmail] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [draft, setDraft] = useState<Filters>(EMPTY_FILTERS);
+  const [applied, setApplied] = useState<Filters>(EMPTY_FILTERS);
   const [memberFilter, setMemberFilter] = useState<"all" | "active" | "inactive">("all");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const query: Record<string, string | number | boolean | undefined> = {
-        limit: 100,
-      };
-      if (action) query.action = action;
-      if (actorUserId) query.actor_user_id = Number(actorUserId);
-      if (email.trim()) query.email = email.trim();
-      if (dateFrom) query.date_from = new Date(dateFrom).toISOString();
-      if (dateTo) {
-        const end = new Date(dateTo);
-        end.setHours(23, 59, 59, 999);
-        query.date_to = end.toISOString();
-      }
-
-      const [ev, ac] = await Promise.all([
-        api<AuditEvent[]>("/audit-events", { query }),
-        api<Actor[]>("/audit-events/actors"),
-      ]);
-      setEvents(ev);
-      setActors(ac);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
+  const { data, error, loading, reload } = useResource(async () => {
+    if (!allowed) {
+      return { events: [] as AuditEvent[], actors: [] as Actor[] };
     }
-  }, [action, actorUserId, email, dateFrom, dateTo]);
+    const query: Record<string, string | number | boolean | undefined> = { limit: 100 };
+    if (applied.action) query.action = applied.action;
+    if (applied.actorUserId) query.actor_user_id = Number(applied.actorUserId);
+    if (applied.email.trim()) query.email = applied.email.trim();
+    if (applied.dateFrom) query.date_from = new Date(applied.dateFrom).toISOString();
+    if (applied.dateTo) {
+      const end = new Date(applied.dateTo);
+      end.setHours(23, 59, 59, 999);
+      query.date_to = end.toISOString();
+    }
+    const [events, actors] = await Promise.all([
+      api<AuditEvent[]>("/audit-events", { query }),
+      api<Actor[]>("/audit-events/actors"),
+    ]);
+    return { events, actors };
+  }, [allowed, applied.action, applied.actorUserId, applied.email, applied.dateFrom, applied.dateTo]);
 
-  useEffect(() => {
-    if (allowed) void load();
-    else setLoading(false);
-  }, [allowed, load]);
+  const events = data?.events ?? [];
+  const actors = data?.actors ?? [];
+
+  const filteredActors = useMemo(
+    () =>
+      actors.filter((a) => {
+        if (memberFilter === "active") return a.is_active;
+        if (memberFilter === "inactive") return !a.is_active;
+        return true;
+      }),
+    [actors, memberFilter],
+  );
+
+  function exportCsv() {
+    if (!events.length) return;
+    const header = [
+      "id",
+      "created_at",
+      "actor_email",
+      "actor_name",
+      "action",
+      "summary",
+      "resource_type",
+      "resource_id",
+    ];
+    const rows = events.map((e) =>
+      [
+        e.audit_event_id,
+        e.created_at,
+        e.actor_email ?? "",
+        e.actor_name ?? "",
+        e.action,
+        (e.summary ?? "").replaceAll('"', '""'),
+        e.resource_type ?? "",
+        e.resource_id ?? "",
+      ]
+        .map((c) => `"${c}"`)
+        .join(","),
+    );
+    const blob = new Blob([[header.join(","), ...rows].join("\n")], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `audit-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   if (!allowed) {
     return (
@@ -124,12 +168,6 @@ export default function AuditPage() {
     );
   }
 
-  const filteredActors = actors.filter((a) => {
-    if (memberFilter === "active") return a.is_active;
-    if (memberFilter === "inactive") return !a.is_active;
-    return true;
-  });
-
   return (
     <>
       <PageHeader
@@ -137,9 +175,14 @@ export default function AuditPage() {
         subtitle="Seguridad"
         title="Auditoría"
         actions={
-          <Button variant="primary" onClick={() => void load()}>
-            <RefreshCw className="size-4" /> Actualizar
-          </Button>
+          <div className="flex gap-2">
+            <Button type="button" onClick={exportCsv}>
+              <Download className="size-4" /> CSV
+            </Button>
+            <Button variant="primary" onClick={() => void reload()}>
+              <RefreshCw className="size-4" /> Actualizar
+            </Button>
+          </div>
         }
       />
 
@@ -154,9 +197,12 @@ export default function AuditPage() {
       <Panel className="mb-6" title="Filtros" code="FIL">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Acción">
-            <Select value={action} onChange={(e) => setAction(e.target.value)}>
+            <Select
+              value={draft.action}
+              onChange={(e) => setDraft((d) => ({ ...d, action: e.target.value }))}
+            >
               <option value="">Todas</option>
-              {ACTION_OPTIONS.filter(Boolean).map((a) => (
+              {ACTION_OPTIONS.map((a) => (
                 <option key={a} value={a}>
                   {a}
                 </option>
@@ -166,11 +212,14 @@ export default function AuditPage() {
 
           <Field label="Usuario (lista)">
             <Select
-              value={actorUserId}
-              onChange={(e) => {
-                setActorUserId(e.target.value);
-                setEmail("");
-              }}
+              value={draft.actorUserId}
+              onChange={(e) =>
+                setDraft((d) => ({
+                  ...d,
+                  actorUserId: e.target.value,
+                  email: "",
+                }))
+              }
             >
               <option value="">Todos</option>
               {filteredActors.map((a) => (
@@ -195,25 +244,39 @@ export default function AuditPage() {
 
           <Field label="Email (búsqueda)">
             <Input
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                setActorUserId("");
-              }}
+              value={draft.email}
+              onChange={(e) =>
+                setDraft((d) => ({
+                  ...d,
+                  email: e.target.value,
+                  actorUserId: "",
+                }))
+              }
               placeholder="parcial@empresa.com"
             />
           </Field>
 
           <Field label="Desde">
-            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            <Input
+              type="date"
+              value={draft.dateFrom}
+              onChange={(e) => setDraft((d) => ({ ...d, dateFrom: e.target.value }))}
+            />
           </Field>
 
           <Field label="Hasta">
-            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            <Input
+              type="date"
+              value={draft.dateTo}
+              onChange={(e) => setDraft((d) => ({ ...d, dateTo: e.target.value }))}
+            />
           </Field>
         </div>
-        <div className="mt-4 flex justify-end">
-          <Button variant="primary" onClick={() => void load()}>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button type="button" onClick={() => { setDraft(EMPTY_FILTERS); setApplied(EMPTY_FILTERS); }}>
+            Limpiar
+          </Button>
+          <Button variant="primary" onClick={() => setApplied({ ...draft })}>
             <Filter className="size-4" /> Aplicar filtros
           </Button>
         </div>
@@ -221,7 +284,7 @@ export default function AuditPage() {
 
       <ErrorLine message={error} />
 
-      {loading ? (
+      {loading && !data ? (
         <Loader />
       ) : events.length === 0 ? (
         <Panel>
@@ -255,18 +318,16 @@ export default function AuditPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-sm">{ev.actor_name || "—"}</div>
-                      <div className="font-mono text-[11px] text-muted">{ev.actor_email || "sistema"}</div>
+                      <div className="font-mono text-[11px] text-muted">
+                        {ev.actor_email || "sistema"}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <Badge value={ev.action} tone="accent" />
                     </td>
-                    <td className="px-4 py-3 text-sm text-muted max-w-xs">
-                      {ev.summary || "—"}
-                    </td>
+                    <td className="max-w-xs px-4 py-3 text-sm text-muted">{ev.summary || "—"}</td>
                     <td className="px-4 py-3 font-mono text-[11px] text-dim">
-                      {ev.resource_type
-                        ? `${ev.resource_type}:${ev.resource_id ?? "—"}`
-                        : "—"}
+                      {ev.resource_type ? `${ev.resource_type}:${ev.resource_id ?? "—"}` : "—"}
                     </td>
                   </tr>
                 ))}
