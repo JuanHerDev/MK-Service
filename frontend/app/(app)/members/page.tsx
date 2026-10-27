@@ -1,7 +1,7 @@
 "use client";
 
-import { Copy, Plus, UserCog, UserMinus, UserPlus } from "lucide-react";
-import { useState } from "react";
+import { Copy, UserCog, UserMinus, UserPlus } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
   Badge,
   Button,
@@ -44,7 +44,6 @@ type Invitation = {
   is_active: boolean;
   created_at: string;
   invite_token?: string | null;
-  invite_url_path?: string | null;
 };
 
 type MembersRes = { items: Member[] };
@@ -72,7 +71,7 @@ export default function MembersPage() {
         <Panel>
           <EmptyState
             title="Acceso restringido"
-            hint="Solo el Owner (o admin de plataforma) puede gestionar miembros e invitaciones."
+            hint="Solo el Owner puede gestionar miembros e invitaciones."
           />
         </Panel>
       </>
@@ -89,7 +88,7 @@ export default function MembersPage() {
         method: "PATCH",
         body: { role_code },
       });
-      setNotice(`Rol de ${m.email} → ${role_code}`);
+      setNotice(`Rol de ${m.email} actualizado a ${role_code}`);
       await reload();
     } catch (e) {
       setActionError((e as Error).message);
@@ -111,7 +110,7 @@ export default function MembersPage() {
   }
 
   async function revokeInvite(inv: Invitation) {
-    if (!confirm(`¿Revocar invitación ${inv.token_prefix}…?`)) return;
+    if (!confirm("¿Revocar esta invitación pendiente?")) return;
     setActionError(null);
     try {
       await api(`/invitations/${inv.invitation_id}/revoke`, { method: "POST" });
@@ -137,8 +136,9 @@ export default function MembersPage() {
 
       <Panel className="mb-4">
         <p className="text-sm text-muted">
-          Gestiona quién accede a <strong className="text-fg">{user?.organization?.name ?? "tu organización"}</strong>.
-          Las invitaciones generan un token de un solo uso.
+          Gestiona quién accede a{" "}
+          <strong className="text-fg">{user?.organization?.name ?? "tu organización"}</strong>. Al invitar se genera
+          un enlace de un solo uso: la persona abre el link, ve el rol asignado y solo completa sus datos de acceso.
         </p>
       </Panel>
 
@@ -195,9 +195,7 @@ export default function MembersPage() {
                           <td className="px-4 py-3">
                             <Badge value={m.is_active ? "active" : "disabled"} />
                           </td>
-                          <td className="px-4 py-3 font-mono text-[11px] text-muted">
-                            {fmtDate(m.created_at)}
-                          </td>
+                          <td className="px-4 py-3 font-mono text-[11px] text-muted">{fmtDate(m.created_at)}</td>
                           <td className="px-4 py-3 text-right">
                             <button
                               type="button"
@@ -224,7 +222,7 @@ export default function MembersPage() {
             <h2 className="mb-3 font-mono text-[10px] tracking-[0.14em] text-dim uppercase">Invitaciones</h2>
             {invites.length === 0 ? (
               <Panel>
-                <EmptyState title="Sin invitaciones" hint="Pulsa Invitar para generar un link/token." />
+                <EmptyState title="Sin invitaciones" hint="Pulsa Invitar para generar un enlace." />
               </Panel>
             ) : (
               <Panel bodyClassName="p-0">
@@ -235,7 +233,7 @@ export default function MembersPage() {
                         <th className="px-4 py-3 font-medium">ID</th>
                         <th className="px-4 py-3 font-medium">Email</th>
                         <th className="px-4 py-3 font-medium">Rol</th>
-                        <th className="px-4 py-3 font-medium">Prefijo</th>
+                        <th className="px-4 py-3 font-medium">Ref.</th>
                         <th className="px-4 py-3 font-medium">Expira</th>
                         <th className="px-4 py-3 font-medium">Estado</th>
                         <th className="px-4 py-3 font-medium" />
@@ -257,10 +255,8 @@ export default function MembersPage() {
                             <td className="px-4 py-3">
                               <Badge value={inv.role_code} tone="accent" />
                             </td>
-                            <td className="px-4 py-3 font-mono text-xs text-accent">{inv.token_prefix}…</td>
-                            <td className="px-4 py-3 font-mono text-[11px] text-muted">
-                              {fmtDate(inv.expires_at)}
-                            </td>
+                            <td className="px-4 py-3 font-mono text-xs text-muted">{inv.token_prefix}…</td>
+                            <td className="px-4 py-3 font-mono text-[11px] text-muted">{fmtDate(inv.expires_at)}</td>
                             <td className="px-4 py-3">
                               <Badge value={status} />
                             </td>
@@ -293,12 +289,12 @@ export default function MembersPage() {
         onCreated={(token) => {
           setInviting(false);
           setRevealed(token);
-          setNotice("Invitación creada. Copia el token ahora.");
+          setNotice("Invitación creada. Copia y envía el enlace al invitado.");
           void reload();
         }}
       />
 
-      <RevealTokenModal token={revealed} onClose={() => setRevealed(null)} />
+      <RevealLinkModal token={revealed} onClose={() => setRevealed(null)} />
     </>
   );
 }
@@ -331,7 +327,7 @@ function InviteModal({
           expires_hours: hours,
         },
       });
-      if (!res.invite_token) throw new Error("El servidor no devolvió invite_token");
+      if (!res.invite_token) throw new Error("No se pudo generar el enlace. Intenta de nuevo.");
       setEmail("");
       onCreated(res.invite_token);
     } catch (err) {
@@ -344,14 +340,14 @@ function InviteModal({
   return (
     <Modal open={open} onClose={onClose} title="Nueva invitación" code="INV+">
       <form onSubmit={submit} className="grid gap-5">
-        <Field label="Email" hint="opcional — si se indica, solo ese correo puede aceptar">
+        <Field label="Email" hint="opcional — si lo indicas, solo ese correo podrá unirse">
           <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="auditor@empresa.com" />
         </Field>
-        <Field label="Rol al aceptar">
+        <Field label="Rol al unirse">
           <Select value={role} onChange={(e) => setRole(e.target.value)}>
-            <option value="auditor">auditor</option>
-            <option value="viewer">viewer</option>
-            <option value="owner">owner</option>
+            <option value="auditor">Auditor</option>
+            <option value="viewer">Viewer</option>
+            <option value="owner">Owner</option>
           </Select>
         </Field>
         <Field label="Validez (horas)">
@@ -369,7 +365,7 @@ function InviteModal({
             Cancelar
           </Button>
           <Button type="submit" variant="primary" disabled={busy}>
-            {busy ? "Generando…" : "Generar token"}
+            {busy ? "Generando…" : "Generar enlace"}
           </Button>
         </div>
       </form>
@@ -377,36 +373,53 @@ function InviteModal({
   );
 }
 
-function RevealTokenModal({ token, onClose }: { token: string | null; onClose: () => void }) {
+function RevealLinkModal({ token, onClose }: { token: string | null; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
-  if (!token) return null;
-  const tokenValue = token;
+  const [link, setLink] = useState("");
 
-  async function copy() {
+  useEffect(() => {
+    if (!token) {
+      setLink("");
+      return;
+    }
+    setLink(`${window.location.origin}/accept-invite?token=${encodeURIComponent(token)}`);
+    setCopied(false);
+  }, [token]);
+
+  if (!token) return null;
+
+  async function copyLink() {
+    const value = link || `${window.location.origin}/accept-invite?token=${encodeURIComponent(token)}`;
     try {
-      await navigator.clipboard.writeText(tokenValue);
+      await navigator.clipboard.writeText(value);
       setCopied(true);
     } catch {
       setCopied(false);
     }
   }
 
+  const displayLink = link || "";
+
   return (
-    <Modal open={!!token} onClose={onClose} title="Token de invitación" code="INV!">
+    <Modal open={!!token} onClose={onClose} title="Enlace de invitación" code="INV+">
       <div className="space-y-4">
         <p className="text-sm text-muted">
-          Compártelo por un canal seguro. <strong className="text-fg">No se vuelve a mostrar</strong>.
+          Envía este enlace al invitado. Al abrirlo verá la organización y el rol, y solo completará sus datos de
+          acceso. <strong className="text-fg">No se vuelve a mostrar</strong>.
         </p>
-        <code className="block break-all border border-line bg-black/40 p-3 font-mono text-xs text-accent">
-          {tokenValue}
-        </code>
+        <div className="border border-accent/40 bg-black/50 p-3">
+          <p className="mb-2 font-mono text-[10px] tracking-[0.14em] text-dim uppercase">Enlace</p>
+          <code className="block break-all font-mono text-xs text-accent select-all">
+            {displayLink || "Preparando…"}
+          </code>
+        </div>
         <div className="flex justify-end gap-2">
-          <Button type="button" onClick={copy}>
-            <Copy className="size-3.5" /> {copied ? "Copiado" : "Copiar"}
+          <Button type="button" onClick={copyLink} disabled={!displayLink}>
+            <Copy className="size-3.5" /> {copied ? "Copiado" : "Copiar enlace"}
           </Button>
           <Button type="button" variant="primary" onClick={onClose}>
-            Ya lo guardé
-          </Button> 
+            Listo
+          </Button>
         </div>
       </div>
     </Modal>

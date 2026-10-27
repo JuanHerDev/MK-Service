@@ -7,7 +7,6 @@ import { Clock } from "@/components/clock";
 import { ParticleField } from "@/components/particle-field";
 import { ScrambleText } from "@/components/scramble-text";
 import { ErrorLine } from "@/components/ui";
-import { API_URL } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 export default function LoginPage() {
@@ -85,7 +84,7 @@ export default function LoginPage() {
       <section className="relative flex items-center justify-center px-4 py-16 sm:px-10">
         <div className="w-full max-w-sm animate-fade-up">
           <div className="mb-10 lg:hidden">
-            <p className="font-mono text-[11px] tracking-[0.18em] text-fg uppercase">AVI—RAG</p>
+            <p className="font-mono text-[11px] tracking-[0.18em] text-fg uppercase">MK Service</p>
           </div>
 
           <p className="label mb-3">
@@ -150,11 +149,17 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-12 flex items-center justify-between border-t border-line pt-4 font-mono text-[10px] tracking-[0.14em] text-dim uppercase">
+          <p className="mt-8 text-center text-sm text-muted">
+            ¿Primera vez en MK Service?{" "}
+            <a href="/register" className="font-medium text-accent transition hover:underline">
+              Crear organización
+            </a>
+          </p>
+
+          <div className="mt-12 border-t border-line pt-4 font-mono text-[10px] tracking-[0.14em] text-dim uppercase">
             <span className="flex items-center gap-2">
-              <span className="size-1.5 animate-pulse-dot rounded-full bg-ok" /> Enlace cifrado · JWT
+              <span className="size-1.5 animate-pulse-dot rounded-full bg-ok" /> Sesión segura
             </span>
-            <span className="truncate pl-4">{API_URL.replace(/^https?:\/\//, "")}</span>
           </div>
         </div>
       </section>
