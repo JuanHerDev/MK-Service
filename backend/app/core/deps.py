@@ -1,17 +1,21 @@
+from collections.abc import Callable
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
+from app.core.permissions import (
+    KEYS_ROLES,
+    OWNER_ROLES,
+    READ_ROLES,
+    WRITE_ROLES,
+    roles_for,
+)
 from app.core.security import safe_decode_token
 from app.models.organization import OrganizationMember
 from app.models.user import User
 
 bearer_scheme = HTTPBearer(auto_error=False)
-
-# Roles that can mutate targets / campaigns
-WRITE_ROLES = frozenset({"owner", "auditor", "admin"})
-READ_ROLES = frozenset({"owner", "auditor", "viewer", "admin"})
 
 
 def get_current_user(
@@ -133,10 +137,50 @@ def get_active_membership(
     return membership
 
 
+def _role_code(membership: OrganizationMember) -> str:
+    return membership.role.role_code if membership.role else ""
+
+
+def require_roles(*allowed: str) -> Callable:
+    """C.2 — factory: membership must have one of the given role_codes."""
+    allowed_set = frozenset(allowed)
+
+    def _dep(
+        membership: OrganizationMember = Depends(get_active_membership),
+    ) -> OrganizationMember:
+        code = _role_code(membership)
+        if code not in allowed_set:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Insufficient role: requires one of {sorted(allowed_set)} (got '{code or 'none'}')",
+            )
+        return membership
+
+    return _dep
+
+
+def require_action(action: str) -> Callable:
+    """C.2 — enforce ROLE_MATRIX action key."""
+
+    def _dep(
+        membership: OrganizationMember = Depends(get_active_membership),
+    ) -> OrganizationMember:
+        allowed = roles_for(action)
+        code = _role_code(membership)
+        if code not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Insufficient role for '{action}': requires one of {sorted(allowed)}",
+            )
+        return membership
+
+    return _dep
+
+
 def require_write_role(
     membership: OrganizationMember = Depends(get_active_membership),
 ) -> OrganizationMember:
-    code = membership.role.role_code if membership.role else ""
+    code = _role_code(membership)
     if code not in WRITE_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -148,10 +192,46 @@ def require_write_role(
 def require_read_role(
     membership: OrganizationMember = Depends(get_active_membership),
 ) -> OrganizationMember:
-    code = membership.role.role_code if membership.role else ""
+    code = _role_code(membership)
     if code not in READ_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient role",
+            detail="Insufficient role: membership required",
         )
     return membership
+
+
+def require_owner_role(
+    membership: OrganizationMember = Depends(get_active_membership),
+) -> OrganizationMember:
+    """Members, invites, sensitive org settings."""
+    code = _role_code(membership)
+    if code not in OWNER_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient role: owner required",
+        )
+    return membership
+
+
+def require_keys_role(
+    membership: OrganizationMember = Depends(get_active_membership),
+) -> OrganizationMember:
+    code = _role_code(membership)
+    if code not in KEYS_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient role: owner required for API keys",
+        )
+    return membership
+
+
+def require_platform_admin(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if not current_user.is_platform_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Platform admin required",
+        )
+    return current_user

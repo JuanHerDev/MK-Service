@@ -7,6 +7,7 @@ from app.models.finding import AttackCategory, Finding, FindingStatus, Severity,
 from app.models.attack_document import AttackDocument
 from app.models.report import Report
 from app.models.api_key import ApiKey
+from app.models.invitation import Invitation
 
 __all__ = [
     "Role",
@@ -27,4 +28,5 @@ __all__ = [
     "AttackDocument",
     "Report",
     "ApiKey",
+    "Invitation",
 ]
