@@ -1,5 +1,3 @@
-"""RQ queue helpers."""
-
 from __future__ import annotations
 
 import logging
@@ -31,7 +29,7 @@ def enqueue_campaign_job(campaign_id: int, organization_id: int):
         execute_campaign_job,
         campaign_id,
         organization_id,
-        job_timeout=900,
+        job_timeout=-1,  # no Unix SIGALRM limit (Windows-safe)
         result_ttl=3600,
         failure_ttl=86400,
     )
@@ -42,3 +40,46 @@ def enqueue_campaign_job(campaign_id: int, organization_id: int):
         organization_id,
     )
     return job
+
+
+def get_queue_status() -> dict:
+    """Redis/RQ health for UI (non-fatal if Redis is down)."""
+    try:
+        r = get_redis()
+        r.ping()
+        q = get_campaign_queue()
+        workers = []
+        try:
+            from rq.worker import Worker
+
+            workers = [w.name for w in Worker.all(connection=r) if QUEUE_NAME in (w.queue_names() or [])]
+        except Exception:
+            try:
+                from rq.worker import Worker
+
+                workers = [w.name for w in Worker.all(connection=r)]
+            except Exception:
+                workers = []
+        return {
+            "redis_ok": True,
+            "queue_name": QUEUE_NAME,
+            "queued_jobs": len(q),
+            "workers": workers,
+            "workers_count": len(workers),
+            "status": "healthy" if workers else "no_workers",
+            "message": (
+                "Worker conectado"
+                if workers
+                else "Redis OK pero no hay worker escuchando mk_campaigns"
+            ),
+        }
+    except Exception as exc:
+        return {
+            "redis_ok": False,
+            "queue_name": QUEUE_NAME,
+            "queued_jobs": 0,
+            "workers": [],
+            "workers_count": 0,
+            "status": "unavailable",
+            "message": f"Redis no disponible: {exc}",
+        }
