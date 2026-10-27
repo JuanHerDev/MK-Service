@@ -24,6 +24,7 @@ from app.models import (
     AttackDocument,
     Report,
     ApiKey,
+    Invitation,
 )
 
 config = context.config
