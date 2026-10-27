@@ -89,3 +89,47 @@ def list_members(
 ):
     """Owner: list organization members and their roles."""
     return {"items": invitation_service.list_members(db, membership=membership)}
+
+
+class MemberRoleUpdate(BaseModel):
+    role_code: str = Field(pattern="^(owner|auditor|viewer)$")
+
+
+class MemberActiveUpdate(BaseModel):
+    is_active: bool
+
+
+@router.patch("/members/{member_id}/role")
+def update_member_role(
+    member_id: int,
+    body: MemberRoleUpdate,
+    membership: OrganizationMember = Depends(require_owner_role),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """ Change a member role. Cannot demote the last owner."""
+    return invitation_service.update_member_role(
+        db,
+        membership=membership,
+        member_id=member_id,
+        new_role_code=body.role_code,
+        actor_user_id=current_user.user_id,
+    )
+
+
+@router.patch("/members/{member_id}/active")
+def set_member_active(
+    member_id: int,
+    body: MemberActiveUpdate,
+    membership: OrganizationMember = Depends(require_owner_role),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Activate / deactivate member. Cannot deactivate last owner or yourself."""
+    return invitation_service.set_member_active(
+        db,
+        membership=membership,
+        member_id=member_id,
+        is_active=body.is_active,
+        actor_user_id=current_user.user_id,
+    )

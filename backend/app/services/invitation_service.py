@@ -292,3 +292,117 @@ def list_members(db: Session, *, membership: OrganizationMember) -> list[dict]:
             }
         )
     return out
+
+
+def update_member_role(
+    db: Session,
+    *,
+    membership: OrganizationMember,
+    member_id: int,
+    new_role_code: str,
+    actor_user_id: int,
+) -> dict:
+    if new_role_code not in INVITEABLE_ROLES:
+        raise HTTPException(status_code=400, detail="role_code must be owner, auditor or viewer")
+
+    target = (
+        db.query(OrganizationMember)
+        .options(joinedload(OrganizationMember.user), joinedload(OrganizationMember.role))
+        .filter(
+            OrganizationMember.organization_member_id == member_id,
+            OrganizationMember.organization_id == membership.organization_id,
+        )
+        .first()
+    )
+    if not target:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    # Cannot demote the last active owner
+    if target.role and target.role.role_code == "owner" and new_role_code != "owner":
+        owners = (
+            db.query(OrganizationMember)
+            .join(Role, OrganizationMember.role_id == Role.role_id)
+            .filter(
+                OrganizationMember.organization_id == membership.organization_id,
+                OrganizationMember.is_active.is_(True),
+                Role.role_code == "owner",
+            )
+            .count()
+        )
+        if owners <= 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot demote the last active owner of the organization",
+            )
+
+    role = _role_by_code(db, new_role_code)
+    target.role_id = role.role_id
+    db.commit()
+    db.refresh(target)
+    target = (
+        db.query(OrganizationMember)
+        .options(joinedload(OrganizationMember.user), joinedload(OrganizationMember.role))
+        .filter(OrganizationMember.organization_member_id == member_id)
+        .first()
+    )
+    return {
+        "organization_member_id": target.organization_member_id,
+        "user_id": target.user_id,
+        "email": target.user.email if target.user else None,
+        "role_code": target.role.role_code if target.role else None,
+        "is_active": target.is_active,
+        "updated_by": actor_user_id,
+    }
+
+
+def set_member_active(
+    db: Session,
+    *,
+    membership: OrganizationMember,
+    member_id: int,
+    is_active: bool,
+    actor_user_id: int,
+) -> dict:
+    target = (
+        db.query(OrganizationMember)
+        .options(joinedload(OrganizationMember.user), joinedload(OrganizationMember.role))
+        .filter(
+            OrganizationMember.organization_member_id == member_id,
+            OrganizationMember.organization_id == membership.organization_id,
+        )
+        .first()
+    )
+    if not target:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    if target.user_id == actor_user_id and not is_active:
+        raise HTTPException(status_code=400, detail="Cannot deactivate yourself")
+
+    if not is_active and target.role and target.role.role_code == "owner":
+        owners = (
+            db.query(OrganizationMember)
+            .join(Role, OrganizationMember.role_id == Role.role_id)
+            .filter(
+                OrganizationMember.organization_id == membership.organization_id,
+                OrganizationMember.is_active.is_(True),
+                Role.role_code == "owner",
+            )
+            .count()
+        )
+        if owners <= 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot deactivate the last active owner",
+            )
+
+    target.is_active = is_active
+    db.commit()
+    db.refresh(target)
+    return {
+        "organization_member_id": target.organization_member_id,
+        "user_id": target.user_id,
+        "email": target.user.email if target.user else None,
+        "role_code": target.role.role_code if target.role else None,
+        "is_active": target.is_active,
+        "updated_by": actor_user_id,
+    }
