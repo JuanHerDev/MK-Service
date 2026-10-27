@@ -23,6 +23,12 @@ class AcceptInviteExisting(BaseModel):
     token: str = Field(min_length=10)
 
 
+@router.get("/invitations/preview")
+def preview_invitation(token: str = Query(..., min_length=10), db: Session = Depends(get_db)):
+    """Public: org name, role and optional locked email for the accept-invite UI."""
+    return invitation_service.preview_invitation(db, token=token)
+
+
 @router.post("/invitations", response_model=InvitationOut, status_code=201)
 def create_invitation(
     body: InvitationCreate,
@@ -107,7 +113,7 @@ def update_member_role(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """ Change a member role. Cannot demote the last owner."""
+    """D.5 — Change a member role. Cannot demote the last owner."""
     return invitation_service.update_member_role(
         db,
         membership=membership,
@@ -125,7 +131,7 @@ def set_member_active(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Activate / deactivate member. Cannot deactivate last owner or yourself."""
+    """D.6 — Activate / deactivate member. Cannot deactivate last owner or yourself."""
     return invitation_service.set_member_active(
         db,
         membership=membership,

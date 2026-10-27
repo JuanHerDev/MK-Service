@@ -1,3 +1,5 @@
+"""D.2 — Create, list, revoke, accept organization invitations."""
+
 from __future__ import annotations
 
 import secrets
@@ -405,4 +407,17 @@ def set_member_active(
         "role_code": target.role.role_code if target.role else None,
         "is_active": target.is_active,
         "updated_by": actor_user_id,
+    }
+
+
+def preview_invitation(db: Session, *, token: str) -> dict:
+    """Public metadata for the accept-invite page (no side effects)."""
+    inv = _load_valid_invite(db, token)
+    return {
+        "email_locked": inv.email,
+        "role_code": inv.role.role_code if inv.role else None,
+        "role_name": inv.role.role_name if inv.role else None,
+        "organization_name": inv.organization.name if inv.organization else None,
+        "expires_at": inv.expires_at.isoformat() if inv.expires_at else None,
+        "token_prefix": inv.token_prefix,
     }
