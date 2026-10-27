@@ -8,6 +8,7 @@ from app.models.attack_document import AttackDocument
 from app.models.report import Report
 from app.models.api_key import ApiKey
 from app.models.invitation import Invitation
+from app.models.audit_event import AuditEvent
 
 __all__ = [
     "Role",
@@ -29,4 +30,5 @@ __all__ = [
     "Report",
     "ApiKey",
     "Invitation",
+    "AuditEvent",
 ]

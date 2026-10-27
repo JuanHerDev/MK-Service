@@ -25,6 +25,7 @@ from app.models import (
     Report,
     ApiKey,
     Invitation,
+    AuditEvent,
 )
 
 config = context.config

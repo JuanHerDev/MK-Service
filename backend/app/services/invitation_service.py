@@ -1,5 +1,3 @@
-"""D.2 — Create, list, revoke, accept organization invitations."""
-
 from __future__ import annotations
 
 import secrets
@@ -14,6 +12,7 @@ from app.models.organization import OrganizationMember
 from app.models.role import Role
 from app.models.user import User, UserStatus
 from app.schemas.invitation import InvitationCreate, InvitationOut
+from app.services import audit_service
 
 
 INVITEABLE_ROLES = frozenset({"owner", "auditor", "viewer"})
@@ -78,6 +77,17 @@ def create_invitation(
         is_active=True,
     )
     db.add(inv)
+    db.flush()
+    audit_service.log_event(
+        db,
+        action="invite.created",
+        actor_user_id=user_id,
+        organization_id=membership.organization_id,
+        resource_type="invitation",
+        resource_id=inv.invitation_id,
+        summary=f"Invitation created for role={data.role_code}",
+        metadata={"email": data.email, "role_code": data.role_code, "expires_hours": data.expires_hours},
+    )
     db.commit()
     db.refresh(inv)
     inv = (
@@ -126,6 +136,15 @@ def revoke_invitation(
         raise HTTPException(status_code=404, detail="Invitation not found")
     inv.is_active = False
     inv.revoked_at = datetime.now(timezone.utc)
+    audit_service.log_event(
+        db,
+        action="invite.revoked",
+        actor_user_id=membership.user_id,
+        organization_id=membership.organization_id,
+        resource_type="invitation",
+        resource_id=inv.invitation_id,
+        summary="Invitation revoked",
+    )
     db.commit()
     db.refresh(inv)
     return _to_out(inv)
@@ -209,6 +228,16 @@ def accept_invitation_new_user(
     inv.accepted_at = datetime.now(timezone.utc)
     inv.accepted_by = user.user_id
     inv.is_active = False
+    audit_service.log_event(
+        db,
+        action="invite.accepted",
+        actor_user_id=user.user_id,
+        organization_id=inv.organization_id,
+        resource_type="invitation",
+        resource_id=inv.invitation_id,
+        summary="Invitation accepted (new user)",
+        metadata={"email": user.email},
+    )
     db.commit()
 
     return {
@@ -338,7 +367,18 @@ def update_member_role(
             )
 
     role = _role_by_code(db, new_role_code)
+    old = target.role.role_code if target.role else None
     target.role_id = role.role_id
+    audit_service.log_event(
+        db,
+        action="member.role_changed",
+        actor_user_id=actor_user_id,
+        organization_id=membership.organization_id,
+        resource_type="organization_member",
+        resource_id=target.organization_member_id,
+        summary=f"Role {old} -> {new_role_code}",
+        metadata={"user_id": target.user_id, "from": old, "to": new_role_code},
+    )
     db.commit()
     db.refresh(target)
     target = (
@@ -398,6 +438,16 @@ def set_member_active(
             )
 
     target.is_active = is_active
+    audit_service.log_event(
+        db,
+        action="member.activated" if is_active else "member.deactivated",
+        actor_user_id=actor_user_id,
+        organization_id=membership.organization_id,
+        resource_type="organization_member",
+        resource_id=target.organization_member_id,
+        summary=f"Member is_active={is_active}",
+        metadata={"user_id": target.user_id},
+    )
     db.commit()
     db.refresh(target)
     return {

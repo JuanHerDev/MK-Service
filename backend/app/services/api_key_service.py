@@ -11,6 +11,7 @@ from app.core.security import hash_token
 from app.models.api_key import ApiKey
 from app.models.organization import OrganizationMember
 from app.schemas.api_key import ApiKeyCreate, ApiKeyCreated, ApiKeyOut
+from app.services import audit_service
 
 PREFIX = "mk_live_"
 ALLOWED_SCOPES = frozenset({"read", "write"})
@@ -67,6 +68,17 @@ def create_api_key(
         created_by=user_id,
     )
     db.add(row)
+    db.flush()
+    audit_service.log_event(
+        db,
+        action="api_key.created",
+        actor_user_id=user_id,
+        organization_id=membership.organization_id,
+        resource_type="api_key",
+        resource_id=row.api_key_id,
+        summary=f"API key created: {data.name.strip()}",
+        metadata={"name": data.name.strip(), "prefix": key_prefix},
+    )
     db.commit()
     db.refresh(row)
 
@@ -106,6 +118,16 @@ def revoke_api_key(
     if not row.is_active:
         return _to_out(row)
     row.is_active = False
+    audit_service.log_event(
+        db,
+        action="api_key.revoked",
+        actor_user_id=membership.user_id,
+        organization_id=membership.organization_id,
+        resource_type="api_key",
+        resource_id=row.api_key_id,
+        summary=f"API key revoked: {row.name}",
+        metadata={"name": row.name, "prefix": row.key_prefix},
+    )
     db.commit()
     db.refresh(row)
     return _to_out(row)

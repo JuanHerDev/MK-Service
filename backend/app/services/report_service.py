@@ -1,3 +1,4 @@
+from app.services import audit_service
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -123,6 +124,21 @@ def create_report(
         expires_at=now + timedelta(days=30),
     )
     db.add(report)
+    db.flush()
+    audit_service.log_event(
+        db,
+        action="report.generated",
+        actor_user_id=user_id,
+        organization_id=membership.organization_id,
+        resource_type="report",
+        resource_id=report.report_id,
+        summary=f"Report {data.report_type}/{data.language} for campaign {campaign_id}",
+        metadata={
+            "campaign_id": campaign_id,
+            "report_type": data.report_type,
+            "language": data.language,
+        },
+    )
     db.commit()
     db.refresh(report)
     return ReportOut.model_validate(report)

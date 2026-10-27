@@ -9,6 +9,7 @@ from app.models.organization import OrganizationMember
 from app.models.target import Target
 from app.models.finding import AttackCategory, Finding, FindingComment, Severity, FindingStatus
 from app.schemas.campaign import CampaignCreate, CampaignOut, CampaignRerun
+from app.services import audit_service
 
 
 def _status_by_code(db: Session, code: str) -> CampaignStatus:
@@ -444,6 +445,7 @@ def run_campaign(
 ) -> CampaignOut:
     """Enqueue campaign on Redis/RQ, or run in-process if async is disabled / Redis down."""
     from app.core.config import settings
+    from app.services import audit_service
 
     c = _load_campaign(db, campaign_id, membership.organization_id)
     current = c.status.status_code if c.status else ""
@@ -466,6 +468,16 @@ def run_campaign(
     c.progress_percent = 0
     c.started_at = None
     c.finished_at = None
+    audit_service.log_event(
+        db,
+        action="campaign.run",
+        actor_user_id=membership.user_id,
+        organization_id=membership.organization_id,
+        resource_type="campaign",
+        resource_id=campaign_id,
+        summary=f"Campaign {campaign_id} queued for execution",
+        metadata={"campaign_id": campaign_id},
+    )
     db.commit()
 
     use_async = getattr(settings, "campaign_async", True)
