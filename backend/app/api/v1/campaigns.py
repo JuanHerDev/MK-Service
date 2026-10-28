@@ -59,9 +59,28 @@ def run_campaign(
     membership: OrganizationMember = Depends(require_write_role),
     db: Session = Depends(get_db),
 ):
-    """Run live probes against the campaign target and open findings when evidence is found."""
+    """Enqueue (or sync-run) live probes against the campaign target."""
     return campaign_service.run_campaign(
         db, membership=membership, campaign_id=campaign_id
+    )
+
+
+
+@router.get("/{campaign_id}/compare")
+def compare_campaign(
+    campaign_id: int,
+    against_id: int | None = Query(
+        None, description="Baseline campaign id (default: parent_campaign_id)"
+    ),
+    membership: OrganizationMember = Depends(require_read_role),
+    db: Session = Depends(get_db),
+):
+    """Diff findings vs parent re-run baseline (or against_id)."""
+    return campaign_service.compare_campaigns(
+        db,
+        membership=membership,
+        campaign_id=campaign_id,
+        against_id=against_id,
     )
 
 @router.post("/{campaign_id}/rerun", response_model=CampaignOut, status_code=201)

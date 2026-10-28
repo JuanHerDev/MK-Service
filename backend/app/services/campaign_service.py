@@ -587,3 +587,96 @@ def rerun_campaign(
     db.refresh(child)
 
     return get_campaign(db, membership=membership, campaign_id=child.campaign_id)
+
+def _finding_fingerprint(f: Finding) -> str:
+    """Stable key to match findings across re-runs (ignore probe index suffix)."""
+    import re
+
+    title = f.title or ""
+    title = re.sub(r"\s*[·•\-]\s*probe\s*\d+\s*$", "", title, flags=re.I).strip().lower()
+    cat = f.category.category_code if f.category else ""
+    sev = f.severity.severity_code if f.severity else ""
+    return f"{cat}|{sev}|{title}"
+
+
+def _finding_brief(f: Finding) -> dict:
+    return {
+        "finding_id": f.finding_id,
+        "title": f.title,
+        "severity": f.severity.severity_code if f.severity else None,
+        "category": f.category.category_code if f.category else None,
+        "status": f.status.status_code if f.status else None,
+        "canary_found": bool(f.canary_found),
+    }
+
+
+def _load_campaign_findings(db: Session, campaign_id: int) -> list[Finding]:
+    return (
+        db.query(Finding)
+        .options(
+            joinedload(Finding.severity),
+            joinedload(Finding.status),
+            joinedload(Finding.category),
+        )
+        .filter(Finding.campaign_id == campaign_id, Finding.is_active.is_(True))
+        .order_by(Finding.finding_id.asc())
+        .all()
+    )
+
+
+def compare_campaigns(
+    db: Session,
+    *,
+    membership: OrganizationMember,
+    campaign_id: int,
+    against_id: int | None = None,
+) -> dict:
+    """Compare a campaign with its parent (re-run) or with an explicit against_id.
+
+    Returns buckets: new, resolved, persistent (matched by category+severity+title base).
+    """
+    current = _load_campaign(db, campaign_id, membership.organization_id)
+    other_id = against_id or current.parent_campaign_id
+    if not other_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Campaign has no parent_campaign_id; pass against_id to compare with another run",
+        )
+    baseline = _load_campaign(db, other_id, membership.organization_id)
+
+    cur_rows = _load_campaign_findings(db, current.campaign_id)
+    base_rows = _load_campaign_findings(db, baseline.campaign_id)
+
+    cur_map = {_finding_fingerprint(f): f for f in cur_rows}
+    base_map = {_finding_fingerprint(f): f for f in base_rows}
+
+    new_keys = set(cur_map) - set(base_map)
+    resolved_keys = set(base_map) - set(cur_map)
+    persistent_keys = set(cur_map) & set(base_map)
+
+    return {
+        "campaign_id": current.campaign_id,
+        "campaign_name": current.name,
+        "campaign_status": current.status.status_code if current.status else None,
+        "baseline_campaign_id": baseline.campaign_id,
+        "baseline_campaign_name": baseline.name,
+        "baseline_status": baseline.status.status_code if baseline.status else None,
+        "summary": {
+            "current_findings": len(cur_rows),
+            "baseline_findings": len(base_rows),
+            "new": len(new_keys),
+            "resolved": len(resolved_keys),
+            "persistent": len(persistent_keys),
+            "improved": len(resolved_keys) > 0 and len(new_keys) == 0,
+        },
+        "new": [_finding_brief(cur_map[k]) for k in sorted(new_keys)],
+        "resolved": [_finding_brief(base_map[k]) for k in sorted(resolved_keys)],
+        "persistent": [
+            {
+                "fingerprint": k,
+                "current": _finding_brief(cur_map[k]),
+                "baseline": _finding_brief(base_map[k]),
+            }
+            for k in sorted(persistent_keys)
+        ],
+    }
