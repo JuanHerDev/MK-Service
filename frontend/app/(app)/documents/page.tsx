@@ -1,6 +1,6 @@
 "use client";
 
-import { Globe, Plus, Trash2, Building2 } from "lucide-react";
+import { Building2, Eye, Globe, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import {
   Badge,
@@ -18,7 +18,7 @@ import {
   cx,
 } from "@/components/ui";
 import { api, uploadForm } from "@/lib/api";
-import { canWrite, useAuth } from "@/lib/auth";
+import { canManageOrgDocuments, isPlatformAdmin, useAuth } from "@/lib/auth";
 import { CATEGORY_LABEL, fmtBytes, fmtDate, pad } from "@/lib/format";
 import type { AttackDocument, Paginated } from "@/lib/types";
 import { useResource } from "@/lib/use-resource";
@@ -27,7 +27,8 @@ const SCOPES = ["", "global", "organization"] as const;
 
 export default function DocumentsPage() {
   const { user } = useAuth();
-  const writable = canWrite(user);
+  const canEditOrg = canManageOrgDocuments(user);
+  const admin = isPlatformAdmin(user);
   const [scope, setScope] = useState<(typeof SCOPES)[number]>("");
   const { data, error, loading, reload } = useResource(
     () => api<Paginated<AttackDocument>>("/attack-documents", { query: { per_page: 100, scope: scope || undefined } }),
@@ -35,6 +36,7 @@ export default function DocumentsPage() {
   );
   const [creating, setCreating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [previewId, setPreviewId] = useState<number | null>(null);
 
   async function remove(d: AttackDocument) {
     if (!confirm(`¿Desactivar el payload "${d.name}"?`)) return;
@@ -56,7 +58,7 @@ export default function DocumentsPage() {
         subtitle="Arsenal"
         title="Payloads"
         actions={
-          writable && (
+          canEditOrg && (
             <Button variant="primary" onClick={() => setCreating(true)}>
               <Plus className="size-4" /> Nuevo payload
             </Button>
@@ -78,6 +80,15 @@ export default function DocumentsPage() {
           </button>
         ))}
       </div>
+
+      <Panel className="mb-4">
+        <p className="text-sm text-muted">
+          Owner y Auditor ven payloads <strong className="text-fg">globales</strong> y de su{" "}
+          <strong className="text-fg">organización</strong>. Solo pueden crear/borrar los de organización.
+          {admin ? " Como platform admin también gestionas los globales." : ""} Cada archivo debe incluir al menos un
+          token <code className="text-accent">MK_CANARY_...</code> para hallazgos confirmados.
+        </p>
+      </Panel>
 
       <div className="space-y-4">
         <ErrorLine message={error || actionError} />
@@ -126,23 +137,81 @@ export default function DocumentsPage() {
                     <dd>{fmtDate(d.created_at)}</dd>
                   </div>
                 </dl>
-                {writable && d.scope === "organization" && (
+                <div className="absolute right-4 bottom-4 flex gap-2 opacity-0 transition group-hover:opacity-100">
                   <button
-                    onClick={() => remove(d)}
-                    className="absolute right-4 bottom-4 hidden text-muted transition group-hover:block hover:text-critical"
-                    aria-label="Desactivar payload"
+                    type="button"
+                    onClick={() => setPreviewId(d.attack_document_id)}
+                    className="text-muted transition hover:text-accent"
+                    aria-label="Ver contenido"
+                    title="Ver contenido"
                   >
-                    <Trash2 className="size-4" />
+                    <Eye className="size-4" />
                   </button>
-                )}
+                  {canEditOrg && (d.scope === "organization" || admin) && (
+                    <button
+                      type="button"
+                      onClick={() => remove(d)}
+                      className="text-muted transition hover:text-critical"
+                      aria-label="Desactivar payload"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  )}
+                </div>
               </article>
             ))}
           </div>
         )}
       </div>
 
-      <CreateDocumentModal open={creating} onClose={() => setCreating(false)} onCreated={reload} isAdmin={!!user?.is_platform_admin} />
+      <CreateDocumentModal open={creating} onClose={() => setCreating(false)} onCreated={reload} isAdmin={admin} />
+      <PreviewPayloadModal documentId={previewId} onClose={() => setPreviewId(null)} />
     </>
+  );
+}
+
+function PreviewPayloadModal({ documentId, onClose }: { documentId: number | null; onClose: () => void }) {
+  const { data, error, loading } = useResource(
+    async () => {
+      if (!documentId) return null;
+      return api<{
+        name: string;
+        content_text: string;
+        canaries: string[];
+        file_name: string;
+        editable: boolean;
+      }>(`/attack-documents/${documentId}/content`);
+    },
+    [documentId],
+  );
+
+  return (
+    <Modal open={!!documentId} onClose={onClose} title={data?.name ?? "Payload"} code="VIEW" wide>
+      {loading && <Loader />}
+      <ErrorLine message={error} />
+      {data && (
+        <div className="space-y-4">
+          <p className="font-mono text-[11px] text-muted">{data.file_name}</p>
+          {data.canaries.length > 0 ? (
+            <p className="text-sm text-ok">
+              Canaries detectados:{" "}
+              {data.canaries.map((c) => (
+                <code key={c} className="mr-2 text-accent">
+                  {c}
+                </code>
+              ))}
+            </p>
+          ) : (
+            <p className="text-sm text-critical">
+              Sin token MK_CANARY_* — este payload no podrá generar hallazgos confirmados.
+            </p>
+          )}
+          <pre className="max-h-[50vh] overflow-auto border border-line bg-black/40 p-4 font-mono text-xs whitespace-pre-wrap text-fg">
+            {data.content_text}
+          </pre>
+        </div>
+      )}
+    </Modal>
   );
 }
 

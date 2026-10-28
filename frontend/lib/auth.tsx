@@ -114,3 +114,15 @@ export function canManageMembers(user: Me | null) {
   const role = user?.membership?.role_code ?? "";
   return role === "owner" || role === "admin" || !!user?.is_platform_admin;
 }
+
+/** Owner / auditor can create-update-delete organization payloads (not global). */
+export function canManageOrgDocuments(user: Me | null) {
+  if (!user) return false;
+  if (user.is_platform_admin) return true;
+  const role = user.membership?.role_code ?? "";
+  return role === "owner" || role === "auditor" || role === "admin";
+}
+
+export function isPlatformAdmin(user: Me | null) {
+  return !!user?.is_platform_admin || user?.membership?.role_code === "admin";
+}
