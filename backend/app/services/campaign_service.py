@@ -11,7 +11,6 @@ from app.models.finding import AttackCategory, Finding, FindingComment, Severity
 from app.schemas.campaign import CampaignCreate, CampaignOut, CampaignRerun
 from app.services import audit_service
 
-
 def _status_by_code(db: Session, code: str) -> CampaignStatus:
     row = db.query(CampaignStatus).filter(CampaignStatus.status_code == code).first()
     if not row:
@@ -253,7 +252,7 @@ def execute_campaign_run(
 ) -> None:
     """Core attack loop (sync). Called by API fallback or RQ worker."""
     from app.models.attack_document import AttackDocument
-    from app.services.attack_engine import DocPayload, payload_bytes_for_document, run_all_probes
+    from app.services.attack_engine import load_doc_payload, run_all_probes
 
     c = _load_campaign(db, campaign_id, organization_id)
     current = c.status.status_code if c.status else ""
@@ -306,37 +305,34 @@ def execute_campaign_run(
         except (json.JSONDecodeError, TypeError, ValueError):
             doc_ids = []
 
-    payloads: list[DocPayload] = []
-    if mode_code == "complete":
-        q = (
-            db.query(AttackDocument)
-            .options(joinedload(AttackDocument.category))
-            .filter(AttackDocument.is_active.is_(True))
+    # Only documents explicitly selected (or org/global active set if none listed).
+    # Content always comes from disk — never from hardcoded Python strings.
+    payloads = []
+    q = (
+        db.query(AttackDocument)
+        .options(joinedload(AttackDocument.category))
+        .filter(AttackDocument.is_active.is_(True))
+    )
+    if doc_ids:
+        q = q.filter(AttackDocument.attack_document_id.in_(doc_ids))
+    else:
+        q = q.filter(
+            (AttackDocument.scope == "global")
+            | (AttackDocument.organization_id == organization_id)
         )
-        if doc_ids:
-            q = q.filter(AttackDocument.attack_document_id.in_(doc_ids))
-        else:
-            q = q.filter(
-                (AttackDocument.scope == "global")
-                | (AttackDocument.organization_id == organization_id)
-            )
-        for d in q.all():
-            cat_code = d.category.category_code if d.category else "prompt_injection_indirect"
-            content, canary = payload_bytes_for_document(
-                technique=d.technique,
-                file_name=d.file_name,
-                storage_path=d.storage_path,
-            )
-            payloads.append(
-                DocPayload(
-                    name=d.name,
-                    file_name=d.file_name,
-                    technique=d.technique,
-                    category_code=cat_code,
-                    content=content,
-                    expected_canary=canary,
-                )
-            )
+    for d in q.all():
+        tech = d.technique or (
+            d.category.category_code if d.category else "prompt_injection_indirect"
+        )
+        loaded = load_doc_payload(
+            attack_document_id=d.attack_document_id,
+            name=d.name,
+            file_name=d.file_name,
+            storage_path=d.storage_path,
+            technique=tech,
+        )
+        if loaded is not None:
+            payloads.append(loaded)
 
     now = datetime.now(timezone.utc)
     c.campaign_status_id = running.campaign_status_id
@@ -345,12 +341,20 @@ def execute_campaign_run(
     c.progress_percent = 10
     db.commit()
 
+    if not payloads:
+        mark_campaign_failed(
+            db,
+            campaign_id=campaign_id,
+            organization_id=organization_id,
+            reason="No attack documents selected or files missing on disk. Upload/select payloads first.",
+        )
+        return
+
     results = run_all_probes(
         target,
         scope_prompt_injection=c.scope_prompt_injection,
         scope_data_leakage=c.scope_data_leakage,
-        mode=mode_code,
-        documents=payloads or None,
+        documents=payloads,
     )
 
     c = _load_campaign(db, campaign_id, organization_id)
@@ -371,10 +375,7 @@ def execute_campaign_run(
         if not cat or not sev:
             continue
 
-        canary = (
-            "MK_CANARY" in (result.evidence or "")
-            or "canary" in (result.evidence or "").lower()
-        )
+        confirmed = getattr(result, "evidence_level", "") == "confirmed" or result.vulnerable
         db.add(
             Finding(
                 campaign_id=c.campaign_id,
@@ -383,14 +384,14 @@ def execute_campaign_run(
                 finding_status_id=open_st.finding_status_id,
                 title=result.probe.title,
                 description=(
-                    f"Probe marked vulnerable after live request to {target.chat_endpoint}. "
-                    f"HTTP {result.status_code}. Evidence: {result.evidence}"
+                    f"CONFIRMED finding against {target.chat_endpoint}. "
+                    f"HTTP {result.status_code}. {result.evidence}"
                 )[:4000],
                 recommendation=result.probe.recommendation,
                 priority_order=result.probe.priority,
                 query_used=result.probe.query[:4000],
                 response_excerpt=(result.response_text or "")[:2000],
-                canary_found=canary,
+                canary_found=confirmed,
             )
         )
 
@@ -445,7 +446,6 @@ def run_campaign(
 ) -> CampaignOut:
     """Enqueue campaign on Redis/RQ, or run in-process if async is disabled / Redis down."""
     from app.core.config import settings
-    from app.services import audit_service
 
     c = _load_campaign(db, campaign_id, membership.organization_id)
     current = c.status.status_code if c.status else ""
