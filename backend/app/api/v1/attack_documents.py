@@ -93,6 +93,19 @@ def get_attack_document(
     )
 
 
+@router.get("/{document_id}/content")
+def get_attack_document_content(
+    document_id: int,
+    membership: OrganizationMember = Depends(require_read_role),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Payload body + extracted canaries. Readable by org members; global too."""
+    return attack_document_service.get_document_content(
+        db, membership=membership, user=current_user, document_id=document_id
+    )
+
+
 @router.delete("/{document_id}", status_code=204)
 def delete_attack_document(
     document_id: int,

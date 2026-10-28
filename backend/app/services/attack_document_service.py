@@ -2,7 +2,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.storage import payload_relative_path, write_payload
+from app.core.storage import payload_relative_path, read_bytes, write_payload
+from app.core.canaries import extract_canaries
 from app.models.attack_document import AttackDocument
 from app.models.finding import AttackCategory
 from app.models.organization import OrganizationMember
@@ -178,3 +179,49 @@ def deactivate_document(
 
     doc.is_active = False
     db.commit()
+
+
+def get_document_content(
+    db: Session,
+    *,
+    membership: OrganizationMember,
+    user: User,
+    document_id: int,
+) -> dict:
+    """Return payload text for auditors/owners/admins (global + own org)."""
+    doc = (
+        db.query(AttackDocument)
+        .filter(AttackDocument.attack_document_id == document_id, AttackDocument.is_active.is_(True))
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Attack document not found")
+    if doc.scope == "organization" and doc.organization_id != membership.organization_id:
+        if not user.is_platform_admin:
+            raise HTTPException(status_code=404, detail="Attack document not found")
+
+    raw = read_bytes(doc.storage_path) if doc.storage_path else None
+    if raw is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Payload file missing on disk. Re-upload the document.",
+        )
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = raw.decode("utf-8", errors="replace")
+    canaries = extract_canaries(text)
+    return {
+        "attack_document_id": doc.attack_document_id,
+        "name": doc.name,
+        "file_name": doc.file_name,
+        "scope": doc.scope,
+        "technique": doc.technique,
+        "content_text": text,
+        "canaries": canaries,
+        "size_bytes": len(raw),
+        "editable": (
+            user.is_platform_admin
+            or (doc.scope == "organization" and doc.organization_id == membership.organization_id)
+        ),
+    }
