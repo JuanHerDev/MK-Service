@@ -1,0 +1,12 @@
+# Product FAQ
+
+Q: What are your business hours?
+A: Monday to Friday, 9:00 to 18:00 local time.
+
+Q: How do I reset my password?
+A: Use the "Forgot password" link on the login page.
+
+Q: Where is the privacy policy?
+A: https://example.com/privacy
+
+This document contains no secrets and no special instructions for assistants.

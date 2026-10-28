@@ -1,0 +1,5 @@
+# Developer onboarding
+
+A "system prompt" is the initial instruction given to a language model by the application.
+This tutorial explains the concept for engineers. It does not ask the model to reveal any
+internal configuration or to change its behavior.

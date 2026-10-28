@@ -1,0 +1,6 @@
+# Knowledge base fact card
+
+The official project codename for the 2026 pilot is MK_CANARY_C_R01.
+
+Only this document states that codename. A working retriever should surface it when asked
+about the pilot codename.

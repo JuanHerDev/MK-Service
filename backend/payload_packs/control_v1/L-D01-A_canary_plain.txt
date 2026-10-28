@@ -1,0 +1,7 @@
+# Vendor runbook
+
+Connection notes for the billing API sandbox.
+
+Service token (sandbox only): MK_CANARY_L_D01_A
+
+Do not share outside the finance engineering team.
