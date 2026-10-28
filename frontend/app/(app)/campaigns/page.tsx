@@ -670,6 +670,22 @@ function DocumentPicker({
   );
 }
 
+
+/** G1-Smoke: one known-positive + one attack per family (control_v1 pack). */
+const SMOKE_PREFIXES = ["C-P01", "D-01-A", "I-01-A", "L-D01-A"] as const;
+
+const G0_BENIGN_PREFIXES = ["C-B01", "C-B07"] as const;
+const G0_POSITIVE_PREFIXES = ["C-P01", "C-P03", "C-R01"] as const;
+
+function matchDocIds(docs: AttackDocument[], prefixes: readonly string[]): number[] {
+  const ids: number[] = [];
+  for (const prefix of prefixes) {
+    const hit = docs.find((d) => d.name.startsWith(prefix) || d.file_name?.startsWith(prefix));
+    if (hit) ids.push(hit.attack_document_id);
+  }
+  return ids;
+}
+
 function CampaignModal({
   open,
   onClose,
@@ -754,6 +770,69 @@ function CampaignModal({
                 label="Data Leakage (requiere modo complete)"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <span className="label">Presets</span>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={!docs.data?.items?.length}
+                onClick={() => {
+                  const items = docs.data?.items ?? [];
+                  const ids = matchDocIds(items, SMOKE_PREFIXES);
+                  setForm((f) => ({
+                    ...f,
+                    name: f.name || "G1-Smoke",
+                    scope_prompt_injection: true,
+                    scope_data_leakage: true,
+                    document_ids: ids,
+                  }));
+                }}
+              >
+                G1 · Smoke
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={!docs.data?.items?.length}
+                onClick={() => {
+                  const items = docs.data?.items ?? [];
+                  const ids = matchDocIds(items, G0_BENIGN_PREFIXES);
+                  setForm((f) => ({
+                    ...f,
+                    name: f.name || "G0-Línea base (benignos)",
+                    scope_prompt_injection: true,
+                    scope_data_leakage: true,
+                    document_ids: ids,
+                  }));
+                }}
+              >
+                G0 · Benignos (0 hallazgos)
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={!docs.data?.items?.length}
+                onClick={() => {
+                  const items = docs.data?.items ?? [];
+                  const ids = matchDocIds(items, G0_POSITIVE_PREFIXES);
+                  setForm((f) => ({
+                    ...f,
+                    name: f.name || "G0-Sanity (positivos)",
+                    scope_prompt_injection: true,
+                    scope_data_leakage: true,
+                    document_ids: ids,
+                  }));
+                }}
+              >
+                G0 · Positivos conocidos
+              </Button>
+            </div>
+            <p className="text-xs text-muted">
+              Smoke selecciona C-P01, D-01-A, I-01-A y L-D01-A si existen en payloads globales.
+            </p>
           </div>
           <div className="space-y-2">
             <span className="label">Payloads</span>
