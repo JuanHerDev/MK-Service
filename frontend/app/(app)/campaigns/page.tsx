@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Play, Plus, RotateCcw, ShieldAlert, Square, Activity } from "lucide-react";
+import { Activity, FileText, GitCompare, Play, Plus, RotateCcw, ShieldAlert, Square } from "lucide-react";
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
@@ -39,6 +39,7 @@ export default function CampaignsPage() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [creating, setCreating] = useState(false);
   const [rerunOf, setRerunOf] = useState<Campaign | null>(null);
+  const [compareOf, setCompareOf] = useState<Campaign | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -298,6 +299,17 @@ export default function CampaignsPage() {
                                 <RotateCcw className="size-3.5" />
                               </IconBtn>
                             )}
+
+                            {(c.parent_campaign_id || c.status === "completed") && (
+                              <IconBtn
+                                title="Comparar re-run"
+                                disabled={busy}
+                                onClick={() => setCompareOf(c)}
+                              >
+                                <GitCompare className="size-3.5" />
+                              </IconBtn>
+                            )}
+
                             {writable && ["completed", "failed", "running", "queued"].includes(c.status) && (
                               <IconBtn
                                 title="Generar reporte"
@@ -353,6 +365,7 @@ export default function CampaignsPage() {
           setNotice(msg);
         }}
       />
+      <CompareModal campaign={compareOf} onClose={() => setCompareOf(null)} />
       <RerunModal
         campaign={rerunOf}
         onClose={() => setRerunOf(null)}
@@ -362,6 +375,185 @@ export default function CampaignsPage() {
         }}
       />
     </>
+  );
+}
+
+
+
+type CompareResult = {
+  campaign_id: number;
+  campaign_name: string;
+  baseline_campaign_id: number;
+  baseline_campaign_name: string;
+  summary: {
+    current_findings: number;
+    baseline_findings: number;
+    new: number;
+    resolved: number;
+    persistent: number;
+    improved: boolean;
+  };
+  new: { finding_id: number; title: string; severity: string | null; category: string | null }[];
+  resolved: { finding_id: number; title: string; severity: string | null; category: string | null }[];
+  persistent: {
+    current: { finding_id: number; title: string; severity: string | null };
+    baseline: { finding_id: number; title: string; severity: string | null };
+  }[];
+};
+
+function CompareModal({
+  campaign,
+  onClose,
+}: {
+  campaign: Campaign | null;
+  onClose: () => void;
+}) {
+  const [againstId, setAgainstId] = useState("");
+  const [data, setData] = useState<CompareResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    if (!campaign) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const q: Record<string, string | number | boolean | undefined> = {};
+      if (againstId.trim()) q.against_id = Number(againstId);
+      const res = await api<CompareResult>(`/campaigns/${campaign.campaign_id}/compare`, {
+        query: q,
+      });
+      setData(res);
+    } catch (e) {
+      setError((e as Error).message);
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // auto-load when opened if has parent
+  if (campaign && !data && !loading && !error && campaign.parent_campaign_id) {
+    // kick once via void — use effect pattern avoided; load on button
+  }
+
+  return (
+    <Modal
+      open={!!campaign}
+      onClose={() => {
+        setData(null);
+        setError(null);
+        setAgainstId("");
+        onClose();
+      }}
+      title={campaign ? `Comparar #${pad(campaign.campaign_id, 3)}` : "Comparar"}
+      code="DIFF"
+      wide
+    >
+      {!campaign ? null : (
+        <div className="space-y-4">
+          <p className="text-sm text-muted">
+            Diff de hallazgos confirmados respecto a la campaña base (parent del re-run u otro id).
+            {campaign.parent_campaign_id
+              ? ` Parent por defecto: #${pad(campaign.parent_campaign_id, 3)}.`
+              : " Esta campaña no es re-run: indica el id base."}
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="Baseline (opcional)">
+              <Input
+                value={againstId}
+                onChange={(e) => setAgainstId(e.target.value)}
+                placeholder={
+                  campaign.parent_campaign_id
+                    ? String(campaign.parent_campaign_id)
+                    : "campaign_id"
+                }
+              />
+            </Field>
+            <Button variant="primary" onClick={() => void load()} disabled={loading}>
+              <GitCompare className="size-4" /> {loading ? "Comparando…" : "Comparar"}
+            </Button>
+          </div>
+          <ErrorLine message={error} />
+          {data && (
+            <>
+              <div className="grid gap-2 sm:grid-cols-4">
+                {[
+                  ["Actual", data.summary.current_findings],
+                  ["Baseline", data.summary.baseline_findings],
+                  ["Nuevos", data.summary.new],
+                  ["Resueltos", data.summary.resolved],
+                ].map(([label, n]) => (
+                  <div key={String(label)} className="border border-line bg-black/30 p-3">
+                    <p className="font-mono text-[10px] tracking-[0.14em] text-dim uppercase">{label}</p>
+                    <p className="text-xl tabular-nums text-fg">{n}</p>
+                  </div>
+                ))}
+              </div>
+              {data.summary.improved && (
+                <p className="border-l-2 border-ok bg-ok/5 px-3 py-2 text-sm text-ok">
+                  Mejora: hay hallazgos resueltos y no aparecieron nuevos.
+                </p>
+              )}
+              <CompareBucket title="Nuevos (solo en actual)" items={data.new} tone="critical" />
+              <CompareBucket title="Resueltos (solo en baseline)" items={data.resolved} tone="ok" />
+              <div>
+                <p className="mb-2 font-mono text-[10px] tracking-[0.14em] text-dim uppercase">
+                  Persistentes ({data.persistent.length})
+                </p>
+                {data.persistent.length === 0 ? (
+                  <p className="text-sm text-muted">Ninguno</p>
+                ) : (
+                  <ul className="space-y-1 text-sm">
+                    {data.persistent.map((p) => (
+                      <li key={p.current.finding_id} className="border border-line px-3 py-2">
+                        <Badge value={p.current.severity || "—"} />{" "}
+                        {p.current.title}
+                        <span className="font-mono text-[10px] text-dim">
+                          {" "}
+                          #{p.baseline.finding_id} → #{p.current.finding_id}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function CompareBucket({
+  title,
+  items,
+  tone,
+}: {
+  title: string;
+  items: { finding_id: number; title: string; severity: string | null; category: string | null }[];
+  tone: "critical" | "ok";
+}) {
+  return (
+    <div>
+      <p className="mb-2 font-mono text-[10px] tracking-[0.14em] text-dim uppercase">
+        {title} ({items.length})
+      </p>
+      {items.length === 0 ? (
+        <p className="text-sm text-muted">Ninguno</p>
+      ) : (
+        <ul className="space-y-1 text-sm">
+          {items.map((it) => (
+            <li key={it.finding_id} className="border border-line px-3 py-2">
+              <Badge value={it.severity || "—"} tone={tone === "ok" ? "ok" : undefined} />{" "}
+              {it.title}
+              <span className="font-mono text-[10px] text-dim"> #{it.finding_id}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
