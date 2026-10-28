@@ -321,15 +321,25 @@ def execute_campaign_run(
             | (AttackDocument.organization_id == organization_id)
         )
     for d in q.all():
-        tech = d.technique or (
-            d.category.category_code if d.category else "prompt_injection_indirect"
+        # Attack family MUST be the catalog category (prompt_injection_*), not the
+        # fine-grained technique label (override_instructions, persona_dan, ...).
+        # Otherwise findings are dropped (unknown category) and complete-mode
+        # skips the direct-body path.
+        family = (
+            d.category.category_code
+            if d.category
+            else (d.technique if d.technique in (
+                "prompt_injection_direct",
+                "prompt_injection_indirect",
+                "data_leakage",
+            ) else "prompt_injection_indirect")
         )
         loaded = load_doc_payload(
             attack_document_id=d.attack_document_id,
             name=d.name,
             file_name=d.file_name,
             storage_path=d.storage_path,
-            technique=tech,
+            technique=family,
         )
         if loaded is not None:
             payloads.append(loaded)
@@ -370,7 +380,15 @@ def execute_campaign_run(
         if not result.vulnerable:
             continue
 
+        tech = (result.probe.technique or "").lower()
         cat = categories.get(result.probe.technique)
+        if not cat:
+            if "leak" in tech or tech == "data_leakage":
+                cat = categories.get("data_leakage")
+            elif "indirect" in tech:
+                cat = categories.get("prompt_injection_indirect")
+            else:
+                cat = categories.get("prompt_injection_direct")
         sev = severities.get(result.probe.severity) or severities.get("high")
         if not cat or not sev:
             continue
