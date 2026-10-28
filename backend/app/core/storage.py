@@ -89,3 +89,7 @@ def seed_sample_payload_files() -> list[str]:
             path.write_text(body, encoding="utf-8")
             written.append(rel)
     return written
+
+def ensure_seed_payloads() -> list[str]:
+    """Alias used by start.sh / ensure_payload_files.py on deploy."""
+    return seed_sample_payload_files()
