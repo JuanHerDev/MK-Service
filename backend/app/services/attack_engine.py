@@ -5,9 +5,6 @@ user) are executed. Nothing is invented from hardcoded probe libraries.
 
 A finding is CONFIRMED only when an exact canary token that appears in the
 payload also appears in the model response outside a trivial echo of the query.
-
-Heuristics (regex for sk-*, "system prompt", compliance phrases) never mark
-vulnerable by themselves — that avoided false positives from model hallucination.
 """
 
 from __future__ import annotations
@@ -273,15 +270,19 @@ def _elicitation_queries(technique: str, document_name: str) -> list[str]:
 
 
 def build_probes_from_documents(documents: list[DocPayload]) -> list[Probe]:
+    """Build probes for every document.
+
+    Docs without MK_CANARY_* (benign controls) still run: the scorer cannot
+    confirm a finding, so a clean target yields 0 findings — that is the test.
+    """
     probes: list[Probe] = []
     for doc in documents:
+        technique = doc.technique or "prompt_injection_indirect"
         if not doc.canaries:
-            logger.warning(
-                "Document %s has no MK_CANARY_* token; cannot confirm findings from it",
+            logger.info(
+                "Document %s has no MK_CANARY_* (control/benign); probes will not confirm findings",
                 doc.name,
             )
-            continue
-        technique = doc.technique or "prompt_injection_indirect"
         for i, query in enumerate(_elicitation_queries(technique, doc.name)):
             probes.append(
                 Probe(
@@ -402,48 +403,45 @@ def run_all_probes(
                 body_text = doc.content.decode("utf-8")
             except UnicodeDecodeError:
                 body_text = doc.content.decode("utf-8", errors="replace")
-            if doc.canaries:
-                ok, status, response, err = post_chat(target, body_text)
-                probe = Probe(
-                    technique=doc.technique or "prompt_injection_direct",
-                    title=f"{doc.name} · direct body",
-                    query=body_text[:2000],
-                    severity=_severity_for_technique(doc.technique),
-                    recommendation=_recommendation_for_technique(doc.technique),
-                    priority=15,
-                    canaries=list(doc.canaries),
-                    document_name=doc.name,
-                    attack_document_id=doc.attack_document_id,
+            ok, status, response, err = post_chat(target, body_text)
+            probe = Probe(
+                technique=doc.technique or "prompt_injection_direct",
+                title=f"{doc.name} · direct body",
+                query=body_text[:2000],
+                severity=_severity_for_technique(doc.technique),
+                recommendation=_recommendation_for_technique(doc.technique),
+                priority=15,
+                canaries=list(doc.canaries),
+                document_name=doc.name,
+                attack_document_id=doc.attack_document_id,
+            )
+            if not ok:
+                results.append(
+                    ProbeResult(
+                        probe=probe,
+                        ok_http=False,
+                        status_code=status,
+                        response_text=response or "",
+                        vulnerable=False,
+                        evidence="",
+                        evidence_level="none",
+                        error=err,
+                    )
                 )
-                if not ok:
-                    results.append(
-                        ProbeResult(
-                            probe=probe,
-                            ok_http=False,
-                            status_code=status,
-                            response_text=response or "",
-                            vulnerable=False,
-                            evidence="",
-                            evidence_level="none",
-                            error=err,
-                        )
+            else:
+                vuln, evidence = score_confirmed(response, doc.canaries, body_text)
+                results.append(
+                    ProbeResult(
+                        probe=probe,
+                        ok_http=True,
+                        status_code=status,
+                        response_text=response,
+                        vulnerable=vuln,
+                        evidence=evidence,
+                        evidence_level="confirmed" if vuln else "none",
+                        error=None,
                     )
-                else:
-                    # For direct body, residual check still applies (canary must appear
-                    # as model "answer", not only inside echoed JSON of the request).
-                    vuln, evidence = score_confirmed(response, doc.canaries, body_text)
-                    results.append(
-                        ProbeResult(
-                            probe=probe,
-                            ok_http=True,
-                            status_code=status,
-                            response_text=response,
-                            vulnerable=vuln,
-                            evidence=evidence,
-                            evidence_level="confirmed" if vuln else "none",
-                            error=None,
-                        )
-                    )
+                )
 
         # Indirect / leakage: elicitation after upload (or even on basic if only chat)
         fam = _family(doc.technique)
