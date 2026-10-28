@@ -6,6 +6,11 @@ alembic upgrade head
 python scripts/seed_catalogs.py
 python scripts/ensure_payload_files.py
 
+# Control pack v1 (idempotente: no duplicate by file_name)
+if [ -f scripts/seed_control_payloads.py ]; then
+  python scripts/seed_control_payloads.py || true
+fi
+
 # 2) Start worker if RUN_WORKER is true (default)
 if [ "${RUN_WORKER:-true}" = "true" ]; then
   rq worker mk_campaigns --url "$REDIS_URL" &
