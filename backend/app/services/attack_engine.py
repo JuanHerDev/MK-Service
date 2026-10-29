@@ -95,12 +95,43 @@ def _build_headers(target: Target) -> dict[str, str]:
     return headers
 
 
-def _chat_body(message: str) -> dict[str, Any]:
+
+def _parse_headers_extra(target: Target) -> dict[str, Any]:
+    raw = (
+        getattr(target, "headers_extra_json", None)
+        or getattr(target, "headers_json", None)
+        or ""
+    )
+    if not raw:
+        return {}
+    if isinstance(raw, dict):
+        return dict(raw)
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {}
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _resolve_model(target: Target, extra: dict[str, Any]) -> str:
+    """Model id for OpenAI-compatible APIs (Groq, lab, OpenRouter)."""
+    for key in ("model", "llm_model", "openai_model"):
+        val = extra.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    # optional column if added later
+    col = getattr(target, "llm_model", None)
+    if isinstance(col, str) and col.strip():
+        return col.strip()
+    return "lab-chat"
+
+
+def _openai_chat_body(message: str, model: str) -> dict[str, Any]:
+    """Standard Chat Completions payload (OpenAI / Groq / LiteLLM / lab)."""
     return {
-        "message": message,
-        "query": message,
-        "prompt": message,
+        "model": model,
         "messages": [{"role": "user", "content": message}],
+        "temperature": 0,
     }
 
 
@@ -110,46 +141,66 @@ def extract_assistant_text(data: Any) -> str:
     if isinstance(data, str):
         return data
     if isinstance(data, dict):
-        for key in ("answer", "response", "output", "text", "content", "result"):
-            val = data.get(key)
-            if isinstance(val, str) and val.strip():
-                return val
+        # OpenAI / Groq
         choices = data.get("choices")
         if isinstance(choices, list) and choices:
             first = choices[0]
             if isinstance(first, dict):
                 msg = first.get("message")
-                if isinstance(msg, dict) and msg.get("content"):
+                if isinstance(msg, dict) and msg.get("content") is not None:
                     return str(msg["content"])
                 if first.get("text"):
                     return str(first["text"])
+        for key in ("answer", "response", "output", "text", "content", "result", "reply"):
+            val = data.get(key)
+            if isinstance(val, str) and val.strip():
+                return val
         return json.dumps(data, ensure_ascii=False)[:8000]
     return str(data)
 
 
 def post_chat(target: Target, message: str, *, timeout: float = 60.0) -> tuple[bool, int | None, str, str | None]:
-    """Returns (ok_http, status_code, response_text, error)."""
+    """POST OpenAI-compatible chat completions to target.chat_endpoint.
+
+    Body: { model, messages, temperature: 0 }.
+    Model comes from Target.headers_extra.model (or default lab-chat).
+    """
     headers = _build_headers(target)
     headers.setdefault("Content-Type", "application/json")
+    extra = _parse_headers_extra(target)
+    # Do not forward internal routing keys as HTTP headers
+    for k in ("model", "llm_model", "openai_model"):
+        headers.pop(k, None)
+        headers.pop(k.title(), None)
+
+    model = _resolve_model(target, extra)
+    body = _openai_chat_body(message, model)
+
     try:
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-            res = client.post(target.chat_endpoint, headers=headers, json=_chat_body(message))
-            text = extract_assistant_text(
-                res.json()
-                if "application/json" in (res.headers.get("content-type") or "")
-                else res.text
-            )
-            if "application/json" not in (res.headers.get("content-type") or ""):
-                text = (res.text or "")[:8000]
-            else:
+            res = client.post(target.chat_endpoint, headers=headers, json=body)
+            ctype = res.headers.get("content-type") or ""
+            if "application/json" in ctype:
                 try:
-                    text = extract_assistant_text(res.json())
+                    text_out = extract_assistant_text(res.json())
                 except Exception:
-                    text = (res.text or "")[:8000]
+                    text_out = (res.text or "")[:8000]
+            else:
+                text_out = (res.text or "")[:8000]
             ok = 200 <= res.status_code < 400
-            return ok, res.status_code, text, None if ok else (res.text or "")[:400]
+            err = None if ok else (res.text or "")[:400]
+            if not ok:
+                logger.warning(
+                    "post_chat %s -> %s model=%s err=%s",
+                    target.chat_endpoint,
+                    res.status_code,
+                    model,
+                    err,
+                )
+            return ok, res.status_code, text_out, err
     except httpx.HTTPError as exc:
         return False, None, "", str(exc)[:400]
+
 
 
 def upload_document(
