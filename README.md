@@ -253,6 +253,40 @@ Dentro de Compose, `DATABASE_URL` y `REDIS_URL` usan hosts `postgres` y `redis` 
 
 ---
 
+
+---
+
+## Entorno de producción (referencia)
+
+| Servicio | URL |
+|----------|-----|
+| API MK | `https://mk-service-api.onrender.com` |
+| Front | Vercel (`mk-service-*.vercel.app`) |
+| **Lab RAG** | **https://mk-service-lab.onrender.com** |
+
+### Lab en prod
+
+| Endpoint | URL |
+|----------|-----|
+| Health | https://mk-service-lab.onrender.com/health |
+| Chat | https://mk-service-lab.onrender.com/v1/chat/completions |
+| Upload | https://mk-service-lab.onrender.com/upload |
+
+**Target «Lab Render»**
+
+| Campo | Valor |
+|-------|--------|
+| mode | `complete` |
+| chat_endpoint | `https://mk-service-lab.onrender.com/v1/chat/completions` |
+| upload_endpoint | `https://mk-service-lab.onrender.com/upload` |
+| auth_type | `none` |
+| headers_extra / model | `{"model": "lab-chat"}` |
+
+**Controles validados:** G0 benignos → 0 hallazgos; G1-Smoke → hallazgos confirmados (local y prod).
+
+> Plan free de Render: el lab se duerme; un `GET /health` antes de la campaña reduce timeouts por cold start.
+
+
 ## Commits
 
 [Conventional Commits](https://www.conventionalcommits.org/) con scope:
