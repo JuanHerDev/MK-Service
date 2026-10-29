@@ -187,6 +187,7 @@ function CreateTargetModal({
     auth_type: "bearer",
     auth_value: "",
     rate_limit_rpm: null,
+    model: "lab-chat",
   };
   const [form, setForm] = useState<TargetCreate>(empty);
   const [error, setError] = useState<string | null>(null);
@@ -198,14 +199,20 @@ function CreateTargetModal({
     setBusy(true);
     setError(null);
     try {
+      const model = (form.model || "").trim();
+      const headers_extra = model ? { model } : null;
       await api("/targets", {
         method: "POST",
         body: {
-          ...form,
+          name: form.name,
           description: form.description || null,
+          mode: form.mode,
+          chat_endpoint: form.chat_endpoint,
           upload_endpoint: form.mode === "complete" ? form.upload_endpoint || null : null,
+          auth_type: form.auth_type,
           auth_value: form.auth_type === "none" ? null : form.auth_value || null,
           rate_limit_rpm: form.rate_limit_rpm || null,
+          headers_extra,
         },
       });
       setForm(empty);
@@ -249,7 +256,19 @@ function CreateTargetModal({
               type="url"
               value={form.chat_endpoint}
               onChange={(e) => set("chat_endpoint", e.target.value)}
-              placeholder="https://api.ejemplo.com/chat"
+              placeholder="https://mk-service-lab.onrender.com/v1/chat/completions"
+            />
+          </Field>
+        </div>
+        <div className="sm:col-span-2">
+          <Field
+            label="Modelo (OpenAI-compatible)"
+            hint="Se envía como body.model en cada probe (lab-chat, llama-3.1-8b-instant, …)"
+          >
+            <Input
+              value={form.model ?? ""}
+              onChange={(e) => set("model", e.target.value)}
+              placeholder="lab-chat"
             />
           </Field>
         </div>

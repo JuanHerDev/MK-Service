@@ -62,6 +62,9 @@ export type TargetCreate = {
   auth_type: "bearer" | "api_key" | "none";
   auth_value?: string | null;
   rate_limit_rpm?: number | null;
+  /** OpenAI-compatible model id; sent as headers_extra.model */
+  model?: string | null;
+  headers_extra?: Record<string, string> | null;
 };
 
 export type CampaignStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
