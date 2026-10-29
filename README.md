@@ -21,8 +21,9 @@ Documentación detallada:
 |------|-------------|
 | `backend/` | FastAPI, SQLAlchemy, Alembic, RQ, motor de ataque |
 | `frontend/` | Next.js 16, React 19, Tailwind CSS v4 |
+| `labs/mk_rag_lab/` | Lab RAG OpenAI-compatible (objetivo de auditoría local/demo) |
 | `docs/` | SRS, arquitectura, investigación, parcial BD (SQL Server) |
-| `docker-compose.yml` | postgres, redis, backend, worker, frontend |
+| `docker-compose.yml` | postgres, redis, backend, worker, frontend, **rag_lab** |
 
 ---
 
@@ -38,7 +39,7 @@ Documentación detallada:
 | PDF | reportlab |
 | Contenedores | Docker Compose |
 
-> La BD académica (SQL Server, tríada CID, 20 tablas en español) es un entregable aparte documentado en `docs/`. La app de producto usa **PostgreSQL** en inglés.
+> La BD académica del **parcial** (SQL Server, tríada CID, 20 tablas en español) es un entregable aparte documentado en `docs/`. La app de producto usa **PostgreSQL** en inglés.
 
 ---
 
@@ -146,14 +147,53 @@ Debe mostrar: `*** Listening on mk_campaigns...`
 
 Detalle: [`backend/README.md`](backend/README.md).
 
-### 6. Mock RAG (demo de ataques)
+### 6. Lab RAG (objetivo de auditoría)
+
+Servicio aparte, contrato **OpenAI Chat Completions**. No vive dentro del backend de MK.
+
+**Opción A — proceso local (venv del lab):**
 
 ```bash
-cd backend
-uvicorn mock_chat:app --reload --port 9000
+cd labs/mk_rag_lab
+python -m venv .venv
+# Windows: .\.venv\Scripts\Activate.ps1
+# Linux/macOS: source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --host 127.0.0.1 --port 9000
 ```
 
-Health: http://127.0.0.1:9000/health  
+**Opción B — Docker Compose (raíz del repo):**
+
+```bash
+docker compose up -d rag_lab
+# Health
+curl http://127.0.0.1:9000/health
+```
+
+| Endpoint | URL |
+|----------|-----|
+| Health | http://127.0.0.1:9000/health |
+| Chat | http://127.0.0.1:9000/v1/chat/completions |
+| Upload | http://127.0.0.1:9000/upload |
+| Swagger lab | http://127.0.0.1:9000/docs |
+
+#### Target «Lab local» en MK Service
+
+| Campo | Valor |
+|-------|--------|
+| Nombre | Lab local |
+| Modo | `complete` |
+| chat_endpoint | `http://127.0.0.1:9000/v1/chat/completions` |
+| upload_endpoint | `http://127.0.0.1:9000/upload` |
+| auth_type | `none` |
+| headers_extra | `{"model": "lab-chat"}` |
+
+Si el **worker RQ corre dentro de Docker** y el lab también está en Compose, usa hosts de red interna:
+
+- chat: `http://rag_lab:9000/v1/chat/completions`
+- upload: `http://rag_lab:9000/upload`
+
+El cliente de campañas envía body OpenAI (`model` + `messages` + `temperature: 0`). Detalle del lab: [`labs/mk_rag_lab/README.md`](labs/mk_rag_lab/README.md).
 
 ### 7. Frontend
 
@@ -175,11 +215,11 @@ UI: http://localhost:3000
 ## Checklist demo (5–8 min)
 
 1. Login  
-2. **Targets** → mode `complete`, chat `http://127.0.0.1:9000/chat`, upload `http://127.0.0.1:9000/upload`, auth `none` → Test OK  
-3. **Payloads** → subir archivo o texto con canary (opcional)  
-4. **Campañas** → crear + ejecutar → worker procesa → `completed`  
-5. **Hallazgos** → severidades / canaries  
-6. **Reportes** → generar PDF → descargar  
+2. **Targets** → crear **Lab local** (tabla de la §6) → Test OK  
+3. **Payloads** → globales `control_v1` (seed) o subir canary  
+4. **Campañas** → preset **G0 · Benignos** (0 hallazgos) y **G1 · Smoke** (≥1 hallazgo) → worker → `completed`  
+5. **Hallazgos** → severidades / canaries confirmados  
+6. **Reportes** → generar PDF técnico/ejecutivo → descargar  
 7. **API Keys** → crear, copiar secreto, probar `X-API-Key`, revocar  
 
 Si la campaña se queda en `queued`: worker apagado o Redis caído.
@@ -204,8 +244,9 @@ Si la campaña se queda en `queued`: worker apagado o Redis caído.
 
 ```bash
 docker compose build
-docker compose up -d postgres redis backend worker frontend
+docker compose up -d postgres redis backend worker frontend rag_lab
 docker compose logs -f worker
+docker compose logs -f rag_lab
 ```
 
 Dentro de Compose, `DATABASE_URL` y `REDIS_URL` usan hosts `postgres` y `redis` (no `localhost`).
