@@ -23,8 +23,16 @@ class Settings(BaseSettings):
     # If false or Redis is down, runs probes in-process.
     campaign_async: bool = True
 
-    # Local directory for generated PDFs and payload files
+    # Payload + report storage
     storage_path: str = "storage"
+    # local | s3  (s3 works with AWS, Cloudflare R2, MinIO via endpoint_url)
+    storage_backend: str = "local"
+    s3_bucket: str | None = None
+    s3_region: str = "auto"
+    s3_endpoint_url: str | None = None
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
+    s3_prefix: str = "mk-service/"
 
     @property
     def cors_origins_list(self) -> list[str]:
