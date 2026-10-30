@@ -1,0 +1,26 @@
+# Example LiteLLM proxy config (optional — run beside the lab).
+# pip install 'litellm[proxy]'
+# litellm --config litellm_config.example.yaml --port 4000
+#
+# Then lab env:
+#   LAB_MODE=proxy
+#   LAB_UPSTREAM_URL=http://127.0.0.1:4000/v1/chat/completions
+#   LAB_UPSTREAM_KEY=sk-litellm-master
+#   LAB_UPSTREAM_MODEL=lab-chat
+
+model_list:
+  - model_name: lab-chat
+    litellm_params:
+      model: groq/llama-3.1-8b-instant
+      api_key: os.environ/GROQ_API_KEY
+  - model_name: lab-chat
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+router_settings:
+  num_retries: 2
+  timeout: 60
+
+general_settings:
+  master_key: sk-litellm-master
