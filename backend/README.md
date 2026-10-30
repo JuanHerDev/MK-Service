@@ -6,7 +6,7 @@ API REST de auditoría RAG: autenticación, multi-tenant, targets, campañas as�
 
 ## Stack
 
-| Pieza | Tecnología |
+| Categoria | Tecnología |
 |-------|------------|
 | Framework | FastAPI + Uvicorn |
 | ORM / migraciones | SQLAlchemy 2 + Alembic |
@@ -54,7 +54,8 @@ Copia `backend/.env.example` → `backend/.env`.
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `7` | |
 | `CAMPAIGN_ASYNC` | `true` | `false` = run síncrono en el request |
 | `CORS_ORIGINS` | `http://localhost:3000,...` | Lista separada por comas |
-| `STORAGE_PATH` | `storage` | Relativo al cwd del proceso |
+| `STORAGE_PATH` | `storage` | Relativo al cwd (en prod free de Render es efímero) |
+| `STORAGE_BACKEND` | `local` | `local` o `s3` (R2/S3 cuando haya bucket) |
 | `API_V1_PREFIX` | `/api/v1` | |
 
 ---
@@ -95,6 +96,9 @@ Importar **todos** los modelos en `alembic/env.py` para que autogenerate vea el 
 ---
 
 ## Seed y storage
+
+En **Render free** no hay persistent disk: los archivos bajo `STORAGE_PATH` se pierden en cada deploy. Usa seed de payloads globales en `start.sh` y evita depender de uploads de organización en demos de producción. Object storage (`STORAGE_BACKEND=s3`) queda soportado en código para cuando lo actives.
+
 
 ```bash
 python scripts/seed_catalogs.py
@@ -197,7 +201,9 @@ Solo atacar sistemas **autorizados**. El `mock_chat.py` es el target seguro para
 ## Mock RAG
 
 ```bash
-uvicorn mock_chat:app --reload --port 9000
+# Prefer labs/mk_rag_lab (OpenAI-compatible). Legacy mock:
+# uvicorn mock_chat:app --reload --port 9000
+# Lab: cd ../labs/mk_rag_lab && uvicorn main:app --reload --port 9000
 ```
 
 | Endpoint | Uso |
@@ -209,8 +215,9 @@ uvicorn mock_chat:app --reload --port 9000
 
 Target de demo:
 
-- chat: `http://127.0.0.1:9000/chat`  
-- upload: `http://127.0.0.1:9000/upload`  
+- chat: `http://127.0.0.1:9000/v1/chat/completions` (lab) o legacy `/chat`  
+- upload: `http://127.0.0.1:9000/upload`
+- headers_extra: `{"model": "lab-chat"}`  
 - auth: `none`  
 - mode: `complete`  
 

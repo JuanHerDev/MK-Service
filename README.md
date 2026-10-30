@@ -260,7 +260,7 @@ Dentro de Compose, `DATABASE_URL` y `REDIS_URL` usan hosts `postgres` y `redis` 
 
 | Servicio | URL |
 |----------|-----|
-| API MK | `https://mk-service-api.onrender.com` |
+| API MK | `https://mk-service-api.onrender.com` (ajusta si tu hostname difiere) |
 | Front | Vercel (`mk-service-*.vercel.app`) |
 | **Lab RAG** | **https://mk-service-lab.onrender.com** |
 
@@ -284,7 +284,42 @@ Dentro de Compose, `DATABASE_URL` y `REDIS_URL` usan hosts `postgres` y `redis` 
 
 **Controles validados:** G0 benignos → 0 hallazgos; G1-Smoke → hallazgos confirmados (local y prod).
 
-> Plan free de Render: el lab se duerme; un `GET /health` antes de la campaña reduce timeouts por cold start.
+### Limitaciones del plan free (Render)
+
+| Recurso | Comportamiento |
+|---------|----------------|
+| **Persistent Disk** | No disponible en compute free → no uses `/var/data` en free |
+| **Filesystem del API** | Efímero: cada deploy/reinicio borra `STORAGE_PATH` local |
+| **Lab / API dormidos** | Cold start 30–60 s; haz `GET /health` antes de lanzar campañas |
+| **Payloads globales `control_v1`** | Re-sembrar en cada arranque (`seed_control_payloads` / `ensure_payload_files` en `start.sh`) |
+| **Payloads de organización** | Se pierden al redeploy → volver a subir o no depender de ellos en demos |
+
+**Estrategia MVP en free:** demos y auditorías de prueba con **lab + presets G0/G1 + payloads globales**. La fila en Neon (metadatos) puede existir sin el archivo en disco → error `Missing payload file on disk` si reutilizas docs org antiguos tras un deploy.
+
+### Storage (código listo; activar cuando dejes free)
+
+Por defecto: `STORAGE_BACKEND=local`, `STORAGE_PATH=storage`.
+
+| Backend | Cuándo | Variables |
+|---------|--------|-----------|
+| **local + disk Render** | Plan Starter+ | Mount `/var/data`, `STORAGE_PATH=/var/data/storage` |
+| **S3 / Cloudflare R2 / MinIO** | Free compute + object storage | `STORAGE_BACKEND=s3`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_ENDPOINT_URL` (R2), `S3_PREFIX=mk-service/` |
+
+Implementación: `backend/app/core/storage.py`, `backend/app/core/config.py`.
+
+### Checklist demo en producción
+
+1. Despertar lab: https://mk-service-lab.onrender.com/health  
+2. Despertar API: `GET https://<tu-api>.onrender.com/health`  
+3. Login en el front (Vercel)  
+4. Target **Lab Render** (tabla arriba); modelo `lab-chat`  
+5. Cola RQ **HEALTHY** (worker en el mismo servicio o activo)  
+6. Campaña **G0 · Benignos** → `completed`, **0** hallazgos  
+7. Campaña **G1 · Smoke** → `completed`, hallazgos confirmados  
+8. Generar PDF técnico y descargar  
+
+Si G1 falla: logs del **worker del API** (`Missing payload` vs HTTP al lab), no solo logs del lab.
+
 
 
 ## Commits
