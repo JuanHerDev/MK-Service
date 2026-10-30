@@ -20,8 +20,27 @@ def _mode_by_code(db: Session, code: str) -> ConnectionMode:
     return mode
 
 
+def _parse_headers_extra(target: Target) -> dict | None:
+    raw = target.headers_extra_json
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else None
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
 def _to_out(target: Target) -> TargetOut:
     mode_code = target.connection_mode.mode_code if target.connection_mode else "basic"
+    extra = _parse_headers_extra(target)
+    model = None
+    if extra:
+        for key in ("model", "llm_model", "openai_model"):
+            val = extra.get(key)
+            if isinstance(val, str) and val.strip():
+                model = val.strip()
+                break
     return TargetOut(
         target_id=target.target_id,
         organization_id=target.organization_id,
@@ -32,6 +51,8 @@ def _to_out(target: Target) -> TargetOut:
         upload_endpoint=target.upload_endpoint,
         auth_type=target.auth_type,
         rate_limit_rpm=target.rate_limit_rpm,
+        headers_extra=extra,
+        model=model,
         connection_status=target.connection_status,
         last_test_at=target.last_test_at,
         last_test_ok=target.last_test_ok,

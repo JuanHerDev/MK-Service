@@ -67,6 +67,8 @@ class TargetOut(BaseModel):
     upload_endpoint: str | None
     auth_type: str
     rate_limit_rpm: int | None
+    headers_extra: dict[str, Any] | None = None
+    model: str | None = None
     connection_status: str
     last_test_at: datetime | None
     last_test_ok: bool | None
