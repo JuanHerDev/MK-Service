@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, RefreshCw, Trash2, Zap } from "lucide-react";
+import { Pencil, Plus, RefreshCw, Trash2, Zap } from "lucide-react";
 import { useState } from "react";
 import {
   Badge,
@@ -23,6 +23,10 @@ import { fmtRelative, pad } from "@/lib/format";
 import type { Paginated, Target, TargetCreate } from "@/lib/types";
 import { useResource } from "@/lib/use-resource";
 
+function targetModel(t: Target): string {
+  return t.model || t.headers_extra?.model || "—";
+}
+
 export default function TargetsPage() {
   const { user } = useAuth();
   const writable = canWrite(user);
@@ -32,6 +36,7 @@ export default function TargetsPage() {
     [showInactive],
   );
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Target | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -135,6 +140,14 @@ export default function TargetsPage() {
                   <footer className="flex gap-2 border-t border-line p-3">
                     <Button
                       size="sm"
+                      disabled={busyId === t.target_id}
+                      onClick={() => setEditing(t)}
+                      aria-label="Editar target"
+                    >
+                      <Pencil className="size-3" />
+                    </Button>
+                    <Button
+                      size="sm"
                       className="flex-1"
                       disabled={busyId === t.target_id}
                       onClick={() => act(t.target_id, () => api(`/targets/${t.target_id}/test`, { method: "POST" }))}
@@ -165,6 +178,14 @@ export default function TargetsPage() {
       </div>
 
       <CreateTargetModal open={creating} onClose={() => setCreating(false)} onCreated={reload} />
+      <EditTargetModal
+        target={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          setEditing(null);
+          reload();
+        }}
+      />
     </>
   );
 }
@@ -326,5 +347,127 @@ function CreateTargetModal({
         </div>
       </form>
     </Modal>
+  );
+}
+
+
+
+function EditTargetModal({
+  target,
+  onClose,
+  onSaved,
+}: {
+  target: Target | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  return (
+    <Modal open={!!target} onClose={onClose} title={target ? `Editar target #${pad(target.target_id, 3)}` : "Editar"} code="TGT~" wide>
+      {target ? (
+        <EditTargetForm key={target.target_id} target={target} onClose={onClose} onSaved={onSaved} />
+      ) : null}
+    </Modal>
+  );
+}
+
+function EditTargetForm({
+  target,
+  onClose,
+  onSaved,
+}: {
+  target: Target;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(target.name);
+  const [description, setDescription] = useState(target.description || "");
+  const [chat, setChat] = useState(target.chat_endpoint);
+  const [upload, setUpload] = useState(target.upload_endpoint || "");
+  const [authType, setAuthType] = useState<TargetCreate["auth_type"]>(
+    (target.auth_type as TargetCreate["auth_type"]) || "none",
+  );
+  const [authValue, setAuthValue] = useState("");
+  const [model, setModel] = useState(target.model || target.headers_extra?.model || "lab-chat");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const body: Record<string, unknown> = {
+        name,
+        description: description || null,
+        chat_endpoint: chat,
+        upload_endpoint: target.mode === "complete" ? upload || null : null,
+        auth_type: authType,
+        headers_extra: model.trim() ? { model: model.trim() } : {},
+      };
+      if (authType !== "none" && authValue.trim()) {
+        body.auth_value = authValue.trim();
+      }
+      await api(`/targets/${target.target_id}`, { method: "PATCH", body });
+      onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="grid gap-5 sm:grid-cols-2">
+      <div className="sm:col-span-2">
+        <Field label="Nombre">
+          <Input required value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+      </div>
+      <div className="sm:col-span-2">
+        <Field label="Descripción">
+          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+        </Field>
+      </div>
+      <div className="sm:col-span-2">
+        <Field label="Chat endpoint">
+          <Input required type="url" value={chat} onChange={(e) => setChat(e.target.value)} />
+        </Field>
+      </div>
+      {target.mode === "complete" && (
+        <div className="sm:col-span-2">
+          <Field label="Upload endpoint">
+            <Input type="url" value={upload} onChange={(e) => setUpload(e.target.value)} />
+          </Field>
+        </div>
+      )}
+      <div className="sm:col-span-2">
+        <Field label="Modelo (OpenAI-compatible)">
+          <Input value={model} onChange={(e) => setModel(e.target.value)} placeholder="lab-chat" />
+        </Field>
+      </div>
+      <Field label="Autenticación">
+        <Select value={authType} onChange={(e) => setAuthType(e.target.value as TargetCreate["auth_type"])}>
+          <option value="bearer">Bearer token</option>
+          <option value="api_key">API key</option>
+          <option value="none">Ninguna</option>
+        </Select>
+      </Field>
+      {authType !== "none" && (
+        <Field label="Nueva credencial" hint="vacío = no cambiar">
+          <Input type="password" autoComplete="off" value={authValue} onChange={(e) => setAuthValue(e.target.value)} />
+        </Field>
+      )}
+      <div className="space-y-4 sm:col-span-2">
+        <ErrorLine message={error} />
+        <div className="flex justify-end gap-2">
+          <Button type="button" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="primary" disabled={busy}>
+            {busy ? "Guardando…" : "Guardar"}
+          </Button>
+        </div>
+      </div>
+    </form>
   );
 }

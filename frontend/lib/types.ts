@@ -44,6 +44,8 @@ export type Target = {
   upload_endpoint: string | null;
   auth_type: string;
   rate_limit_rpm: number | null;
+  headers_extra?: Record<string, string> | null;
+  model?: string | null;
   connection_status: string;
   last_test_at: string | null;
   last_test_ok: boolean | null;
