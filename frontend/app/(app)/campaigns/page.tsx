@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, FileText, GitCompare, Play, Plus, RotateCcw, ShieldAlert, Square } from "lucide-react";
+import { Activity, Eye, FileText, GitCompare, Play, Plus, RotateCcw, ShieldAlert, Square } from "lucide-react";
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
@@ -21,7 +21,7 @@ import {
 import { api } from "@/lib/api";
 import { canWrite, useAuth } from "@/lib/auth";
 import { CATEGORY_LABEL, fmtDate, pad } from "@/lib/format";
-import type { AttackDocument, Campaign, CampaignCreate, Paginated, Target } from "@/lib/types";
+import type { AttackDocument, Campaign, CampaignCreate, CampaignDetail, Paginated, Target } from "@/lib/types";
 import { useQueryParam } from "@/lib/use-query-param";
 import { useResource } from "@/lib/use-resource";
 
@@ -40,6 +40,7 @@ export default function CampaignsPage() {
   const [creating, setCreating] = useState(false);
   const [rerunOf, setRerunOf] = useState<Campaign | null>(null);
   const [compareOf, setCompareOf] = useState<Campaign | null>(null);
+  const [detailOf, setDetailOf] = useState<Campaign | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -267,6 +268,9 @@ export default function CampaignsPage() {
                         <td className="px-4 py-3 font-mono text-[11px] text-muted">{fmtDate(c.created_at)}</td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-1">
+                            <IconBtn title="Detalle" onClick={() => setDetailOf(c)}>
+                              <Eye className="size-3.5" />
+                            </IconBtn>
                             {writable && ["queued", "failed"].includes(c.status) && (
                               <IconBtn
                                 title="Ejecutar"
@@ -372,6 +376,15 @@ export default function CampaignsPage() {
         onDone={async (msg) => {
           await reload();
           setNotice(msg);
+        }}
+      />
+      <CampaignDetailModal
+        campaign={detailOf}
+        onClose={() => setDetailOf(null)}
+        onOpenParent={(id) => {
+          const parent = (data?.[0]?.items || []).find((x) => x.campaign_id === id) || null;
+          if (parent) setDetailOf(parent);
+          else setDetailOf({ campaign_id: id } as Campaign);
         }}
       />
     </>
@@ -958,6 +971,157 @@ function RerunModal({
           </Button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+
+function CampaignDetailModal({
+  campaign,
+  onClose,
+  onOpenParent,
+}: {
+  campaign: Campaign | null;
+  onClose: () => void;
+  onOpenParent: (id: number) => void;
+}) {
+  const [detail, setDetail] = useState<CampaignDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!campaign?.campaign_id) {
+      setDetail(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    api<CampaignDetail>(`/campaigns/${campaign.campaign_id}/detail`)
+      .then((d) => {
+        if (!cancelled) setDetail(d);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Error al cargar detalle");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [campaign?.campaign_id]);
+
+  return (
+    <Modal
+      open={!!campaign}
+      onClose={onClose}
+      title={detail ? `Campaña #${pad(detail.campaign_id, 3)} · ${detail.name}` : "Detalle de campaña"}
+      code="CMP·"
+      wide
+    >
+      {loading && <Loader label="Cargando detalle…" />}
+      <ErrorLine message={error} />
+      {detail && !loading && (
+        <div className="space-y-6 text-sm">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="label text-dim">Estado</p>
+              <p className="font-mono text-fg">{detail.status}</p>
+            </div>
+            <div>
+              <p className="label text-dim">Target</p>
+              <p className="text-fg">{detail.target_name || `Target #${detail.target_id}`}</p>
+            </div>
+            <div>
+              <p className="label text-dim">Creada por</p>
+              <p className="text-fg">
+                {detail.created_by_name || detail.created_by_email || `Usuario #${detail.created_by}`}
+              </p>
+              {detail.created_by_email && detail.created_by_name && (
+                <p className="font-mono text-[11px] text-muted">{detail.created_by_email}</p>
+              )}
+            </div>
+            <div>
+              <p className="label text-dim">Fechas</p>
+              <p className="text-muted">Creada: {fmtDate(detail.created_at)}</p>
+              {detail.started_at && <p className="text-muted">Inicio: {fmtDate(detail.started_at)}</p>}
+              {detail.finished_at && <p className="text-muted">Fin: {fmtDate(detail.finished_at)}</p>}
+            </div>
+            <div>
+              <p className="label text-dim">Alcance</p>
+              <p className="text-fg">
+                {[detail.scope_prompt_injection && "Prompt Injection", detail.scope_data_leakage && "Data Leakage"]
+                  .filter(Boolean)
+                  .join(" · ") || "—"}
+              </p>
+            </div>
+            <div>
+              <p className="label text-dim">Hallazgos</p>
+              <p className="font-mono text-fg">{detail.findings_count ?? 0}</p>
+              <Link href={`/findings?campaign=${detail.campaign_id}`} className="text-xs text-accent underline">
+                Ver hallazgos
+              </Link>
+            </div>
+          </div>
+
+          {detail.parent && (
+            <div className="border border-line bg-ink/50 p-4">
+              <p className="label mb-2 text-dim">Campaña padre (re-run de)</p>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-fg">
+                    #{pad(detail.parent.campaign_id, 3)} · {detail.parent.name}
+                  </p>
+                  <p className="font-mono text-[11px] text-muted">{detail.parent.status}</p>
+                </div>
+                <Button size="sm" onClick={() => onOpenParent(detail.parent!.campaign_id)}>
+                  Ver padre
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {detail.children && detail.children.length > 0 && (
+            <div>
+              <p className="label mb-2 text-dim">Re-ejecuciones hijas</p>
+              <ul className="space-y-2">
+                {detail.children.map((ch) => (
+                  <li key={ch.campaign_id} className="flex items-center justify-between border border-line px-3 py-2">
+                    <span>
+                      #{pad(ch.campaign_id, 3)} · {ch.name}{" "}
+                      <span className="font-mono text-[11px] text-muted">{ch.status}</span>
+                    </span>
+                    <Button size="sm" onClick={() => onOpenParent(ch.campaign_id)}>
+                      Detalle
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div>
+            <p className="label mb-2 text-dim">Documentos de ataque</p>
+            {!detail.documents?.length ? (
+              <p className="text-muted">Sin documentos listados en la configuración (o se usó el set por defecto).</p>
+            ) : (
+              <ul className="max-h-48 space-y-1 overflow-auto border border-line">
+                {detail.documents.map((d) => (
+                  <li key={d.attack_document_id} className="border-b border-line px-3 py-2 last:border-0">
+                    <p className="text-fg">{d.name}</p>
+                    <p className="font-mono text-[10px] text-muted">
+                      #{d.attack_document_id}
+                      {d.technique ? ` · ${d.technique}` : ""}
+                      {d.scope ? ` · ${d.scope}` : ""}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }

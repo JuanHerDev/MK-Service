@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Clock } from "@/components/clock";
@@ -17,6 +18,7 @@ export default function LoginPage() {
   const [show, setShow] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [burst, setBurst] = useState(0);
 
   useEffect(() => {
     if (status === "authenticated") router.replace("/dashboard");
@@ -30,7 +32,8 @@ export default function LoginPage() {
       await login(email.trim(), password);
       router.replace("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error de autenticación");
+      setBurst((n) => n + 1);
+      setError(err instanceof Error ? err.message : "Credenciales incorrectas");
     } finally {
       setBusy(false);
     }
@@ -40,12 +43,11 @@ export default function LoginPage() {
     <main className="bg-grid relative grid min-h-screen overflow-hidden lg:grid-cols-[1.2fr_1fr]">
       <div className="overlay-vignette absolute inset-0" />
 
-      {/* Left: hero */}
       <section className="relative hidden flex-col justify-between border-r border-line p-10 lg:flex">
         <header className="flex items-start justify-between font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
           <div>
             <p className="text-fg">MK Service</p>
-            <p>Adversarial Validation Interface</p>
+            <p>Auditoría de seguridad en RAG / LLM</p>
           </div>
           <div className="text-right">
             <Clock />
@@ -53,34 +55,35 @@ export default function LoginPage() {
           </div>
         </header>
 
-        <ParticleField className="absolute inset-0 m-auto size-full max-h-[760px]" />
+        <ParticleField className="absolute inset-0 m-auto size-full max-h-[760px]" burstToken={burst} />
 
         <div className="relative">
           <p className="label mb-6">
-            <span className="text-accent">●</span> Red-team para sistemas RAG / LLM
+            <span className="text-accent">●</span> Validación adversarial para sistemas de IA
           </p>
           <h1 className="text-[clamp(3.5rem,7vw,7.5rem)] leading-[0.88] font-medium tracking-[-0.06em]">
-            <ScrambleText text="Probe." duration={700} />
+            <ScrambleText text="Audita." duration={700} />
             <br />
-            <ScrambleText text="Detect." duration={900} delay={150} className="text-muted" />
+            <ScrambleText text="Detecta." duration={900} />
             <br />
-            <ScrambleText text="Harden." duration={1100} delay={300} className="text-accent text-glow" />
+            <span className="text-accent">
+              <ScrambleText text="Fortalece." duration={1100} />
+            </span>
           </h1>
-          <div className="mt-10 grid max-w-xl grid-cols-3 gap-6 border-t border-line pt-6 font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+          <div className="mt-10 grid grid-cols-3 gap-4 font-mono text-[11px] tracking-[0.12em] text-muted uppercase">
             <div>
               <p className="text-fg">01</p>Prompt Injection
             </div>
             <div>
-              <p className="text-fg">02</p>Indirect PI
+              <p className="text-fg">02</p>PI indirecta
             </div>
             <div>
-              <p className="text-fg">03</p>Data Leakage
+              <p className="text-fg">03</p>Fuga de datos
             </div>
           </div>
         </div>
       </section>
 
-      {/* Right: form */}
       <section className="relative flex items-center justify-center px-4 py-16 sm:px-10">
         <div className="w-full max-w-sm animate-fade-up">
           <div className="mb-10 lg:hidden">
@@ -98,20 +101,19 @@ export default function LoginPage() {
           <form onSubmit={onSubmit} className="space-y-6">
             <div className="group">
               <label htmlFor="email" className="label mb-2 block">
-                Email
+                Correo
               </label>
               <input
                 id="email"
                 type="email"
-                autoComplete="email"
                 required
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="operador@empresa.com"
-                className="w-full border-0 border-b border-line-strong bg-transparent pb-3 text-lg outline-none transition placeholder:text-dim focus:border-accent"
+                className="w-full border border-line bg-ink px-3 py-2.5 text-sm outline-none transition focus:border-accent"
               />
             </div>
-            <div>
+            <div className="group">
               <label htmlFor="password" className="label mb-2 block">
                 Contraseña
               </label>
@@ -119,48 +121,39 @@ export default function LoginPage() {
                 <input
                   id="password"
                   type={show ? "text" : "password"}
-                  autoComplete="current-password"
                   required
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full border-0 border-b border-line-strong bg-transparent pr-10 pb-3 text-lg outline-none transition placeholder:text-dim focus:border-accent"
+                  className="w-full border border-line bg-ink px-3 py-2.5 pr-10 text-sm outline-none transition focus:border-accent"
                 />
                 <button
                   type="button"
+                  className="absolute top-1/2 right-2 -translate-y-1/2 text-muted hover:text-fg"
                   onClick={() => setShow((s) => !s)}
-                  className="absolute top-1 right-0 text-muted hover:text-accent"
-                  aria-label={show ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  aria-label={show ? "Ocultar" : "Mostrar"}
                 >
                   {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </button>
               </div>
             </div>
-
             <ErrorLine message={error} />
-
             <button
               type="submit"
               disabled={busy}
-              className="group flex h-14 w-full items-center justify-between bg-accent px-5 font-mono text-xs tracking-[0.2em] text-void uppercase transition hover:shadow-[0_0_40px_rgb(212_255_63/0.4)] disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 bg-accent px-4 py-3 text-sm font-medium text-void transition hover:opacity-90 disabled:opacity-50"
             >
-              {busy ? "Autenticando…" : "Entrar al sistema"}
-              <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+              {busy ? "Verificando…" : "Entrar"}
+              <ArrowRight className="size-4" />
             </button>
           </form>
 
           <p className="mt-8 text-center text-sm text-muted">
-            ¿Primera vez en MK Service?{" "}
-            <a href="/register" className="font-medium text-accent transition hover:underline">
-              Crear organización
-            </a>
+            ¿Sin cuenta?{" "}
+            <Link href="/register" className="text-accent underline">
+              Registrarse
+            </Link>
           </p>
-
-          <div className="mt-12 border-t border-line pt-4 font-mono text-[10px] tracking-[0.14em] text-dim uppercase">
-            <span className="flex items-center gap-2">
-              <span className="size-1.5 animate-pulse-dot rounded-full bg-ok" /> Sesión segura
-            </span>
-          </div>
         </div>
       </section>
     </main>
