@@ -23,9 +23,27 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 from typing import Any
 
 import httpx
+
+_LAB_DIR = Path(__file__).resolve().parent
+_ENV_FILE = _LAB_DIR / ".env"
+_DOTENV_LOADED = False
+_DOTENV_ERROR: str | None = None
+
+try:
+    from dotenv import load_dotenv
+
+    # override=True so .env wins over empty shell vars
+    _DOTENV_LOADED = load_dotenv(_ENV_FILE, override=True)
+    if not _ENV_FILE.is_file():
+        _DOTENV_ERROR = f".env not found at {_ENV_FILE}"
+    elif not _DOTENV_LOADED:
+        _DOTENV_ERROR = f"load_dotenv returned False for {_ENV_FILE}"
+except ImportError:
+    _DOTENV_ERROR = "python-dotenv not installed in this interpreter"
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -69,13 +87,25 @@ class ChatCompletionIn(BaseModel):
         return ""
 
 
+def _env(name: str, default: str = "") -> str:
+    return (os.getenv(name) or default).strip().strip('"').strip("'")
+
+
 @app.get("/health")
 def health():
+    mode = _env("LAB_MODE", "vulnerable").lower() or "vulnerable"
+    key = _env("LAB_UPSTREAM_KEY")
     return {
         "status": "ok",
         "service": "mk-rag-lab",
         "docs_in_store": len(_STORE),
-        "mode": os.getenv("LAB_MODE", "vulnerable"),
+        "mode": mode,
+        "dotenv_loaded": _DOTENV_LOADED,
+        "dotenv_path": str(_ENV_FILE),
+        "dotenv_error": _DOTENV_ERROR,
+        "upstream_url_set": bool(_env("LAB_UPSTREAM_URL")),
+        "upstream_key_set": bool(key),
+        "upstream_model": _env("LAB_UPSTREAM_MODEL") or None,
     }
 
 
@@ -160,9 +190,16 @@ def _vulnerable_reply(user: str) -> str:
 
 
 async def _proxy_upstream(body: ChatCompletionIn) -> str:
-    url = os.getenv("LAB_UPSTREAM_URL", "").strip()
-    key = os.getenv("LAB_UPSTREAM_KEY", "").strip()
-    model = os.getenv("LAB_UPSTREAM_MODEL", body.model or "lab-chat").strip()
+    url = _env("LAB_UPSTREAM_URL")
+    key = _env("LAB_UPSTREAM_KEY")
+    # Never send MK's alias "lab-chat" upstream — Groq rejects unknown model ids
+    model = _env("LAB_UPSTREAM_MODEL")
+    if not model or model in ("lab-chat", "default"):
+        raise RuntimeError(
+            "LAB_UPSTREAM_MODEL is missing or invalid. "
+            "Set it to a Groq model id from GET /openai/v1/models "
+            "(e.g. openai/gpt-oss-20b)."
+        )
     if not url:
         return _vulnerable_reply(body.user_text())
 
@@ -183,7 +220,11 @@ async def _proxy_upstream(body: ChatCompletionIn) -> str:
 
     async with httpx.AsyncClient(timeout=60.0) as client:
         res = await client.post(url, headers=headers, json=payload)
-        res.raise_for_status()
+        body_preview = (res.text or "")[:500]
+        if res.status_code >= 400:
+            raise RuntimeError(
+                f"upstream HTTP {res.status_code} model={model!r} url={url!r} body={body_preview}"
+            )
         data = res.json()
         choices = data.get("choices") or []
         if choices and isinstance(choices[0], dict):
@@ -194,7 +235,7 @@ async def _proxy_upstream(body: ChatCompletionIn) -> str:
 
 @app.post("/v1/chat/completions")
 async def chat_completions(body: ChatCompletionIn):
-    mode = os.getenv("LAB_MODE", "vulnerable").lower()
+    mode = _env("LAB_MODE", "vulnerable").lower() or "vulnerable"
     if mode == "proxy":
         try:
             content = await _proxy_upstream(body)
