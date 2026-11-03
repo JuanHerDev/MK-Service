@@ -54,3 +54,30 @@ class CampaignRerun(BaseModel):
     document_ids: list[int] | None = None
     config: dict[str, Any] | None = None
     change_config: bool = False  # if false, copy config from parent campaign; if true, use provided config
+
+class CampaignDocumentBrief(BaseModel):
+    attack_document_id: int
+    name: str
+    technique: str | None = None
+    category: str | None = None
+    scope: str | None = None
+
+
+class CampaignRef(BaseModel):
+    campaign_id: int
+    name: str
+    status: str
+    created_at: datetime | None = None
+
+
+class CampaignDetailOut(CampaignOut):
+    """Full campaign view for UI detail modal."""
+    target_name: str | None = None
+    created_by_email: str | None = None
+    created_by_name: str | None = None
+    document_ids: list[int] = Field(default_factory=list)
+    documents: list[CampaignDocumentBrief] = Field(default_factory=list)
+    findings_count: int = 0
+    parent: CampaignRef | None = None
+    children: list[CampaignRef] = Field(default_factory=list)
+    config: dict[str, Any] | None = None

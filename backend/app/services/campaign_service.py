@@ -8,7 +8,9 @@ from app.models.campaign import Campaign, CampaignStatus
 from app.models.organization import OrganizationMember
 from app.models.target import Target
 from app.models.finding import AttackCategory, Finding, FindingComment, Severity, FindingStatus
-from app.schemas.campaign import CampaignCreate, CampaignOut, CampaignRerun
+from app.schemas.campaign import CampaignCreate, CampaignDetailOut, CampaignDocumentBrief, CampaignOut, CampaignRef, CampaignRerun
+from app.models.user import User
+from app.models.attack_document import AttackDocument
 from app.services import audit_service
 
 def _status_by_code(db: Session, code: str) -> CampaignStatus:
@@ -188,6 +190,129 @@ def get_campaign(
             "mode": mode,
             "status": c.status.status_code if c.status else "queued",
         }
+    )
+
+
+
+
+def get_campaign_detail(
+    db: Session,
+    *,
+    membership: OrganizationMember,
+    campaign_id: int,
+) -> CampaignDetailOut:
+    campaign = _load_campaign(db, campaign_id, membership.organization_id)
+    base = _to_out(campaign)
+
+    target_name = None
+    if campaign.target is not None:
+        target_name = campaign.target.name
+
+    creator = db.query(User).filter(User.user_id == campaign.created_by).first()
+    created_by_email = creator.email if creator else None
+    created_by_name = getattr(creator, "full_name", None) if creator else None
+
+    cfg: dict = {}
+    if campaign.config_json:
+        import json
+        try:
+            raw = campaign.config_json
+            cfg = json.loads(raw) if isinstance(raw, str) else (raw or {})
+        except Exception:
+            cfg = {}
+    doc_ids = list(cfg.get("document_ids") or [])
+
+    documents: list[CampaignDocumentBrief] = []
+    if doc_ids:
+        rows = (
+            db.query(AttackDocument)
+            .filter(AttackDocument.attack_document_id.in_(doc_ids))
+            .all()
+        )
+        by_id = {d.attack_document_id: d for d in rows}
+        for did in doc_ids:
+            d = by_id.get(did)
+            if not d:
+                documents.append(
+                    CampaignDocumentBrief(
+                        attack_document_id=did,
+                        name=f"(doc #{did} no disponible)",
+                    )
+                )
+                continue
+            technique = None
+            category = None
+            if getattr(d, "attack_category", None) is not None:
+                category = getattr(d.attack_category, "category_code", None) or getattr(
+                    d.attack_category, "category_name", None
+                )
+            technique = getattr(d, "technique", None) or getattr(d, "technique_code", None)
+            documents.append(
+                CampaignDocumentBrief(
+                    attack_document_id=d.attack_document_id,
+                    name=d.name,
+                    technique=technique,
+                    category=category,
+                    scope=getattr(d, "scope", None),
+                )
+            )
+
+    findings_count = (
+        db.query(Finding)
+        .filter(Finding.campaign_id == campaign.campaign_id)
+        .count()
+    )
+
+    parent_ref = None
+    if campaign.parent_campaign_id:
+        parent = (
+            db.query(Campaign)
+            .options(joinedload(Campaign.status))
+            .filter(
+                Campaign.campaign_id == campaign.parent_campaign_id,
+                Campaign.organization_id == membership.organization_id,
+            )
+            .first()
+        )
+        if parent:
+            parent_ref = CampaignRef(
+                campaign_id=parent.campaign_id,
+                name=parent.name,
+                status=parent.status.status_code if parent.status else "unknown",
+                created_at=parent.created_at,
+            )
+
+    children_rows = (
+        db.query(Campaign)
+        .options(joinedload(Campaign.status))
+        .filter(
+            Campaign.parent_campaign_id == campaign.campaign_id,
+            Campaign.organization_id == membership.organization_id,
+        )
+        .order_by(Campaign.campaign_id.asc())
+        .all()
+    )
+    children = [
+        CampaignRef(
+            campaign_id=ch.campaign_id,
+            name=ch.name,
+            status=ch.status.status_code if ch.status else "unknown",
+            created_at=ch.created_at,
+        )
+        for ch in children_rows
+    ]
+
+    return CampaignDetailOut(
+        **base.model_dump(),
+        target_name=target_name,
+        created_by_email=created_by_email,
+        created_by_name=created_by_name,
+        document_ids=doc_ids,
+        documents=documents,
+        findings_count=findings_count,
+        parent=parent_ref,
+        children=children,
+        config=cfg or None,
     )
 
 
@@ -414,6 +539,7 @@ def execute_campaign_run(
         )
 
     if not results:
+        # No HTTP probes ran (e.g. empty payload set after filters). Fail only then.
         c.campaign_status_id = failed.campaign_status_id
         c.progress_percent = 100
         c.finished_at = datetime.now(timezone.utc)
@@ -424,10 +550,19 @@ def execute_campaign_run(
         c.campaign_status_id = failed.campaign_status_id
         c.progress_percent = 100
         c.finished_at = datetime.now(timezone.utc)
+        errors = [r.error for r in results if r.error][:5]
+        statuses = [str(r.status_code) for r in results if r.status_code is not None][:8]
+        err = "; ".join(errors) if errors else "All probes failed (no HTTP 2xx)"
+        detail = (
+            f"All HTTP probes failed against {target.chat_endpoint}. "
+            f"status_codes={statuses or 'n/a'}. Last errors: {err}"
+        )
+        # Visible in Render logs
+        import logging
+        logging.getLogger(__name__).error("Campaign %s failed: %s", campaign_id, detail)
         cat = categories.get("prompt_injection_direct") or next(iter(categories.values()), None)
         sev = severities.get("medium") or severities.get("high")
         if cat and sev and open_st:
-            err = next((r.error for r in results if r.error), "All probes failed")
             db.add(
                 Finding(
                     campaign_id=c.campaign_id,
@@ -435,15 +570,14 @@ def execute_campaign_run(
                     severity_id=sev.severity_id,
                     finding_status_id=open_st.finding_status_id,
                     title="Campaign probes could not reach chat endpoint",
-                    description=(
-                        f"All HTTP probes failed against {target.chat_endpoint}. Last error: {err}"
-                    ),
+                    description=detail[:4000],
                     recommendation=(
-                        "Verify chat_endpoint, auth headers, and network access from the worker host."
+                        "Verify chat_endpoint URL, Authorization / headers_extra on the Target, "
+                        "and that Render can reach the host (Groq needs Bearer + model-compatible body)."
                     ),
                     priority_order=5,
                     query_used=None,
-                    response_excerpt=err,
+                    response_excerpt=err[:2000],
                     canary_found=False,
                 )
             )

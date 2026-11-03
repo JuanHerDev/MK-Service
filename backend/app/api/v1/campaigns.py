@@ -5,7 +5,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user, require_read_role, require_write_role
 from app.models.organization import OrganizationMember
 from app.models.user import User
-from app.schemas.campaign import CampaignCreate, CampaignListResponse, CampaignOut, CampaignRerun
+from app.schemas.campaign import CampaignCreate, CampaignDetailOut, CampaignListResponse, CampaignOut, CampaignRerun
 from app.services import campaign_service
 
 router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
@@ -44,6 +44,18 @@ def get_campaign(
 ):
     return campaign_service.get_campaign(db, membership=membership, campaign_id=campaign_id)
 
+
+
+@router.get("/{campaign_id}/detail", response_model=CampaignDetailOut)
+def campaign_detail(
+    campaign_id: int,
+    membership: OrganizationMember = Depends(require_read_role),
+    db: Session = Depends(get_db),
+):
+    """Rich campaign view: documents, creator, parent/children, findings count."""
+    return campaign_service.get_campaign_detail(
+        db, membership=membership, campaign_id=campaign_id
+    )
 
 @router.post("/{campaign_id}/cancel", response_model=CampaignOut)
 def cancel_campaign(
