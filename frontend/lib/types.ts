@@ -98,6 +98,33 @@ export type CampaignCreate = {
   run_now: boolean;
 };
 
+export type CampaignDocumentBrief = {
+  attack_document_id: number;
+  name: string;
+  technique?: string | null;
+  category?: string | null;
+  scope?: string | null;
+};
+
+export type CampaignRef = {
+  campaign_id: number;
+  name: string;
+  status: string;
+  created_at?: string | null;
+};
+
+export type CampaignDetail = Campaign & {
+  target_name?: string | null;
+  created_by_email?: string | null;
+  created_by_name?: string | null;
+  document_ids?: number[];
+  documents?: CampaignDocumentBrief[];
+  findings_count?: number;
+  parent?: CampaignRef | null;
+  children?: CampaignRef[];
+  config?: Record<string, unknown> | null;
+};
+
 export type Severity = "low" | "medium" | "high" | "critical";
 
 export type FindingStatus = "open" | "in_progress" | "resolved" | "false_positive" | "accepted_risk";
