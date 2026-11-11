@@ -183,6 +183,7 @@ export function Modal({
   code,
   children,
   wide,
+  xl,
 }: {
   open: boolean;
   onClose: () => void;
@@ -190,6 +191,8 @@ export function Modal({
   code?: string;
   children: React.ReactNode;
   wide?: boolean;
+  /** Near full-viewport dialog (e.g. PDF preview) */
+  xl?: boolean;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -200,17 +203,22 @@ export function Modal({
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-void/80 p-4 backdrop-blur-md sm:items-center">
+    <div
+      className={cx(
+        "fixed inset-0 z-50 flex justify-center bg-void/80 p-4 backdrop-blur-md",
+        xl ? "items-stretch sm:items-center" : "items-start overflow-y-auto sm:items-center",
+      )}
+    >
       <div className="absolute inset-0" onClick={onClose} />
       <div
         role="dialog"
         aria-modal
         className={cx(
-          "hud relative w-full animate-fade-up border border-line-strong bg-ink shadow-2xl",
-          wide ? "max-w-3xl" : "max-w-lg",
+          "hud relative flex w-full animate-fade-up flex-col border border-line-strong bg-ink shadow-2xl",
+          xl ? "h-[min(96vh,100%)] max-h-[96vh] max-w-6xl" : wide ? "max-w-3xl" : "max-w-lg",
         )}
       >
-        <header className="flex items-center justify-between border-b border-line px-5 py-4">
+        <header className="flex shrink-0 items-center justify-between border-b border-line px-5 py-4">
           <div className="flex items-center gap-3">
             {code && <span className="font-mono text-[10px] text-accent">{code}</span>}
             <h3 className="label !text-fg">{title}</h3>
@@ -219,7 +227,14 @@ export function Modal({
             <X className="size-4" />
           </button>
         </header>
-        <div className="p-5">{children}</div>
+        <div
+          className={cx(
+            "p-5",
+            xl && "flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4",
+          )}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );

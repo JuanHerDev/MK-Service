@@ -135,8 +135,10 @@ export async function api<T>(path: string, opts: Options = {}): Promise<T> {
   return data as T;
 }
 
-/** Download a report PDF with Bearer auth (blob + temporary object URL). */
-export async function downloadReport(reportId: number, filename?: string): Promise<void> {
+/** Fetch report PDF as blob URL (caller must revokeObjectURL). */
+export async function fetchReportBlob(
+  reportId: number,
+): Promise<{ objectUrl: string; filename: string; blob: Blob }> {
   const url = `${API_URL}${API_PREFIX}/reports/${reportId}/download`;
 
   const doFetch = () => {
@@ -162,13 +164,19 @@ export async function downloadReport(reportId: number, filename?: string): Promi
 
   const blob = await res.blob();
   const cd = res.headers.get("Content-Disposition");
-  let name = filename || `report_${reportId}.pdf`;
+  let filename = `report_${reportId}.pdf`;
   if (cd) {
     const m = /filename\*?=(?:UTF-8''|")?([^";\n]+)/i.exec(cd);
-    if (m?.[1]) name = decodeURIComponent(m[1].replace(/"/g, "").trim());
+    if (m?.[1]) filename = decodeURIComponent(m[1].replace(/"/g, "").trim());
   }
-
   const objectUrl = URL.createObjectURL(blob);
+  return { objectUrl, filename, blob };
+}
+
+/** Download a report PDF with Bearer auth. */
+export async function downloadReport(reportId: number, filename?: string): Promise<void> {
+  const { objectUrl, filename: fromHeader } = await fetchReportBlob(reportId);
+  const name = filename || fromHeader;
   const a = document.createElement("a");
   a.href = objectUrl;
   a.download = name;

@@ -1,8 +1,8 @@
 "use client";
 
-import { Download, FileText, Plus, RefreshCw } from "lucide-react";
+import { Download, Eye, FileText, Plus, RefreshCw } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Badge,
   Button,
@@ -16,7 +16,7 @@ import {
   Select,
   cx,
 } from "@/components/ui";
-import { api, downloadReport } from "@/lib/api";
+import { api, downloadReport, fetchReportBlob } from "@/lib/api";
 import { canWrite, useAuth } from "@/lib/auth";
 import { fmtBytes, fmtDate, fmtRelative, pad } from "@/lib/format";
 import type { Campaign, Paginated, Report } from "@/lib/types";
@@ -38,6 +38,7 @@ export default function ReportsPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [previewOf, setPreviewOf] = useState<Report | null>(null);
 
   const campaigns = useResource(() => api<Paginated<Campaign>>("/campaigns", { query: { per_page: 100 } }));
   const { data, error, loading, reload } = useResource(
@@ -239,15 +240,26 @@ export default function ReportsPage() {
                         {r.file_path || "—"}
                       </td>
                       <td className="px-4 py-3">
-                        <Button
-                          size="sm"
-                          disabled={r.report_status !== "ready" || downloadingId === r.report_id}
-                          onClick={() => handleDownload(r)}
-                          title={r.report_status === "ready" ? "Descargar PDF" : "No disponible"}
-                        >
-                          <Download className={cx("size-3.5", downloadingId === r.report_id && "animate-spin")} />
-                          {downloadingId === r.report_id ? "…" : "PDF"}
-                        </Button>
+                        <div className="flex flex-wrap gap-1">
+                          <Button
+                            size="sm"
+                            disabled={r.report_status !== "ready"}
+                            onClick={() => setPreviewOf(r)}
+                            title={r.report_status === "ready" ? "Vista previa" : "No disponible"}
+                          >
+                            <Eye className="size-3.5" />
+                            Ver
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={r.report_status !== "ready" || downloadingId === r.report_id}
+                            onClick={() => handleDownload(r)}
+                            title={r.report_status === "ready" ? "Descargar PDF" : "No disponible"}
+                          >
+                            <Download className={cx("size-3.5", downloadingId === r.report_id && "animate-spin")} />
+                            {downloadingId === r.report_id ? "…" : "PDF"}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -259,6 +271,7 @@ export default function ReportsPage() {
       </div>
 
       <GenerateReportModal
+        key={creating ? "open" : "closed"}
         open={creating}
         campaigns={completedCampaigns}
         allCampaigns={campaigns.data?.items ?? []}
@@ -271,6 +284,7 @@ export default function ReportsPage() {
         }}
         onError={(msg) => setActionError(msg)}
       />
+      <ReportPreviewModal report={previewOf} onClose={() => setPreviewOf(null)} />
     </>
   );
 }
@@ -290,11 +304,25 @@ function GenerateReportModal({
   onCreated: (msg: string) => void | Promise<void>;
   onError: (msg: string) => void;
 }) {
-  const options = campaigns.length ? campaigns : allCampaigns.filter((c) => c.status === "completed");
-  const [campaignId, setCampaignId] = useState(String(options[0]?.campaign_id ?? ""));
+  const options = useMemo(() => {
+    if (campaigns.length) return campaigns;
+    return allCampaigns.filter((c) => ["completed", "failed"].includes(c.status));
+  }, [campaigns, allCampaigns]);
+
+  const [campaignId, setCampaignId] = useState("");
   const [reportType, setReportType] = useState<"technical" | "executive">("technical");
   const [language, setLanguage] = useState<"es" | "en">("es");
   const [busy, setBusy] = useState(false);
+
+  // Sync selected campaign when modal opens or options load (fixes empty submit until manual change)
+  useEffect(() => {
+    if (!open) return;
+    const first = options[0]?.campaign_id;
+    setCampaignId((prev) => {
+      if (prev && options.some((c) => String(c.campaign_id) === prev)) return prev;
+      return first != null ? String(first) : "";
+    });
+  }, [open, options]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -320,7 +348,8 @@ function GenerateReportModal({
     <Modal open={open} onClose={onClose} title="Generar reporte" code="RPT+">
       <form onSubmit={submit} className="space-y-5">
         <p className="text-sm text-muted">
-          Se genera un PDF real (ejecutivo o técnico) con los hallazgos de la campaña y queda disponible para descarga.
+          Se genera un PDF (ejecutivo o técnico) con los hallazgos de la campaña. Luego puedes verlo en vista previa o
+          descargarlo.
         </p>
 
         <Field label="Campaña">
@@ -367,6 +396,113 @@ function GenerateReportModal({
           </Button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+function ReportPreviewModal({
+  report,
+  onClose,
+}: {
+  report: Report | null;
+  onClose: () => void;
+}) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [filename, setFilename] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!report?.report_id) return;
+    let cancelled = false;
+    let url: string | null = null;
+
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      setObjectUrl(null);
+      try {
+        const res = await fetchReportBlob(report.report_id);
+        if (cancelled) {
+          URL.revokeObjectURL(res.objectUrl);
+          return;
+        }
+        url = res.objectUrl;
+        setObjectUrl(res.objectUrl);
+        setFilename(res.filename);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "No se pudo cargar la vista previa");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [report?.report_id]);
+
+  return (
+    <Modal
+      open={!!report}
+      onClose={onClose}
+      title={
+        report
+          ? `Vista previa · RPT-${pad(report.report_id, 3)} · ${report.report_type}`
+          : "Vista previa"
+      }
+      code="RPT·"
+      xl
+    >
+      <div className="flex h-full min-h-0 flex-1 flex-col gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 text-xs text-muted">
+          <span className="font-mono">
+            {report && (
+              <>
+                Campaña #{pad(report.campaign_id, 3)} · {report.language.toUpperCase()} ·{" "}
+                {report.report_status}
+              </>
+            )}
+          </span>
+          <div className="flex gap-2">
+            {report && report.report_status === "ready" && (
+              <Button
+                size="sm"
+                onClick={() =>
+                  void downloadReport(
+                    report.report_id,
+                    filename || `mk_rpt_${report.report_id}_${report.report_type}_${report.language}.pdf`,
+                  )
+                }
+              >
+                <Download className="size-3.5" />
+                Descargar
+              </Button>
+            )}
+            <Button size="sm" onClick={onClose}>
+              Cerrar
+            </Button>
+          </div>
+        </div>
+
+        <ErrorLine message={error} />
+        {loading && <Loader label="Cargando PDF…" />}
+
+        {objectUrl && !loading && (
+          <div className="relative min-h-0 w-full flex-1 overflow-hidden border border-line bg-void">
+            <iframe
+              title="Vista previa del reporte PDF"
+              src={`${objectUrl}#view=FitH`}
+              className="absolute inset-0 h-full w-full border-0 bg-white"
+            />
+          </div>
+        )}
+
+        {!loading && !objectUrl && !error && (
+          <p className="text-sm text-muted">No hay documento para mostrar.</p>
+        )}
+      </div>
     </Modal>
   );
 }
