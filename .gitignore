@@ -17,6 +17,7 @@ frontend/.env.local
 !.env.example
 !backend/.env.example
 !frontend/.env.example
+!frontend/app/(app)/reports
 
 # Python / backend
 __pycache__/
