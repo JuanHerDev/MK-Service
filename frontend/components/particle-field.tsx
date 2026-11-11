@@ -114,9 +114,9 @@ export function ParticleField({
       const sinX = Math.sin(ax);
 
       for (const p of pts) {
-        let px = p.x + p.vx * expand * 1.4;
-        let py = p.y + p.vy * expand * 1.4;
-        let pz = p.z + p.vz * expand * 1.4;
+        const px = p.x + p.vx * expand * 1.4;
+        const py = p.y + p.vy * expand * 1.4;
+        const pz = p.z + p.vz * expand * 1.4;
         const x1 = px * cosY - pz * sinY;
         const z1 = px * sinY + pz * cosY;
         const y1 = py * cosX - z1 * sinX;

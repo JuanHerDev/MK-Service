@@ -379,6 +379,7 @@ export default function CampaignsPage() {
         }}
       />
       <CampaignDetailModal
+        key={detailOf?.campaign_id ?? "closed"}
         campaign={detailOf}
         onClose={() => setDetailOf(null)}
         onOpenParent={(id) => {
@@ -985,32 +986,33 @@ function CampaignDetailModal({
   onClose: () => void;
   onOpenParent: (id: number) => void;
 }) {
+  const campaignId = campaign?.campaign_id ?? null;
   const [detail, setDetail] = useState<CampaignDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(campaignId));
 
   useEffect(() => {
-    if (!campaign?.campaign_id) {
-      setDetail(null);
-      return;
-    }
+    if (campaignId == null) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    api<CampaignDetail>(`/campaigns/${campaign.campaign_id}/detail`)
-      .then((d) => {
-        if (!cancelled) setDetail(d);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Error al cargar detalle");
-      })
-      .finally(() => {
+
+    void (async () => {
+      try {
+        const d = await api<CampaignDetail>(`/campaigns/${campaignId}/detail`);
+        if (cancelled) return;
+        setDetail(d);
+        setError(null);
+      } catch (e) {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "Error al cargar detalle");
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
-  }, [campaign?.campaign_id]);
+  }, [campaignId]);
 
   return (
     <Modal
