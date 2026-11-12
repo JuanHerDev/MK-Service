@@ -148,6 +148,21 @@ export default function RegisterPage() {
               Iniciar sesión
             </Link>
           </p>
+          <p className="mt-6 text-center text-[11px] leading-relaxed text-dim">
+            Al crear la cuenta aceptas los{" "}
+            <Link href="/terms" className="text-muted underline hover:text-accent">
+              Términos
+            </Link>
+            , la{" "}
+            <Link href="/privacy" className="text-muted underline hover:text-accent">
+              Privacidad
+            </Link>{" "}
+            y el aviso de{" "}
+            <Link href="/cookies" className="text-muted underline hover:text-accent">
+              Cookies
+            </Link>
+            .
+          </p>
         </div>
       </section>
 

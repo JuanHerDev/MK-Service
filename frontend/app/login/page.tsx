@@ -154,6 +154,21 @@ export default function LoginPage() {
               Registrarse
             </Link>
           </p>
+          <p className="mt-6 text-center text-[11px] leading-relaxed text-dim">
+            Al continuar aceptas los{" "}
+            <Link href="/terms" className="text-muted underline hover:text-accent">
+              Términos
+            </Link>
+            , la{" "}
+            <Link href="/privacy" className="text-muted underline hover:text-accent">
+              Privacidad
+            </Link>{" "}
+            y el aviso de{" "}
+            <Link href="/cookies" className="text-muted underline hover:text-accent">
+              Cookies
+            </Link>
+            .
+          </p>
         </div>
       </section>
     </main>

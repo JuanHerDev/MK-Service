@@ -168,3 +168,10 @@ textarea {
     transition-duration: 0.01ms !important;
   }
 }
+
+@utility text-critical {
+  color: var(--color-critical);
+}
+@utility text-high {
+  color: var(--color-high);
+}

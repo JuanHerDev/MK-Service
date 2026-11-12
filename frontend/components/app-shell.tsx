@@ -116,7 +116,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm">{user.full_name || user.email.split("@")[0]}</p>
             <p className="truncate font-mono text-[10px] tracking-[0.1em] text-dim uppercase">
-              {user.is_platform_admin ? "Platform admin" : user.membership?.role_name ?? "—"}
+              {user.is_platform_admin ? "Admin de plataforma" : user.membership?.role_name ?? "—"}
             </p>
           </div>
           <button
