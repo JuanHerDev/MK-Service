@@ -11,6 +11,7 @@ from app.models.finding import Finding
 from app.models.organization import Organization, OrganizationMember
 from app.models.report import Report
 from app.schemas.report import ReportCreate, ReportOut
+from app.core.storage import read_bytes, write_bytes
 from app.services.pdf_report import build_report_pdf, write_report_file
 
 
@@ -102,14 +103,12 @@ def create_report(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {exc}") from exc
 
-    storage_root = Path(settings.storage_path)
     rel = (
-        Path("reports")
-        / f"org_{membership.organization_id}"
-        / f"campaign_{campaign_id}_{data.report_type}_{data.language}_{int(datetime.now(timezone.utc).timestamp())}.pdf"
+        f"reports/org_{membership.organization_id}/"
+        f"campaign_{campaign_id}_{data.report_type}_{data.language}_{int(datetime.now(timezone.utc).timestamp())}.pdf"
     )
-    abs_path = storage_root / rel
-    size = write_report_file(abs_path, pdf_bytes)
+    write_bytes(rel, pdf_bytes)
+    size = len(pdf_bytes)
 
     now = datetime.now(timezone.utc)
     report = Report(
@@ -181,12 +180,13 @@ def get_report(
     return ReportOut.model_validate(report)
 
 
-def get_report_file_path(
+def get_report_pdf_bytes(
     db: Session,
     *,
     membership: OrganizationMember,
     report_id: int,
-) -> Path:
+) -> tuple[bytes, str]:
+    """Load report PDF from configured storage (local or S3/R2)."""
     report = (
         db.query(Report)
         .join(Campaign, Report.campaign_id == Campaign.campaign_id)
@@ -198,7 +198,29 @@ def get_report_file_path(
     )
     if not report or not report.file_path:
         raise HTTPException(status_code=404, detail="Report file not found")
-    path = Path(settings.storage_path) / report.file_path
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="Report file missing on disk")
-    return path
+
+    data = read_bytes(report.file_path)
+    if data is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Report file missing in storage (configure durable STORAGE_BACKEND=s3 / R2)",
+        )
+
+    filename = Path(report.file_path).name
+    return data, filename
+
+
+def get_report_file_path(
+    db: Session,
+    *,
+    membership: OrganizationMember,
+    report_id: int,
+) -> Path:
+    """Local-only helper. Prefer get_report_pdf_bytes for S3/R2."""
+    data, filename = get_report_pdf_bytes(db, membership=membership, report_id=report_id)
+    from app.core.storage import storage_root
+
+    tmp = storage_root() / "reports" / "_cache" / filename
+    tmp.parent.mkdir(parents=True, exist_ok=True)
+    tmp.write_bytes(data)
+    return tmp
