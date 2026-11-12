@@ -20,7 +20,7 @@ from app.models.target import ConnectionMode
 from app.models.user import UserStatus
 
 ROLES = [
-    ("admin", "Platform Admin", "Full platform control", True),
+    ("admin", "Admin de plataforma", "Control de plataforma MK Service (no confundir con superuser de BD)", True),
     ("owner", "Owner", "Organization owner", False),
     ("auditor", "Auditor", "Runs campaigns and manages findings", False),
     ("viewer", "Viewer", "Read-only access to reports and backlog", False),
