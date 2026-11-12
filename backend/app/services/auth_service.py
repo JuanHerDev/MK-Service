@@ -146,6 +146,12 @@ def refresh_tokens(db: Session, *, refresh_token: str) -> TokenResponse:
     user = db.query(User).filter(User.user_id == token_row.user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    status_row = db.query(UserStatus).filter(UserStatus.user_status_id == user.user_status_id).first()
+    if status_row and status_row.status_code != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is not active",
+        )
 
     # Rotate: revoke old refresh
     token_row.revoked = True

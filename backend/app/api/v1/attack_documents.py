@@ -15,6 +15,17 @@ from app.services import attack_document_service
 router = APIRouter(prefix="/attack-documents", tags=["Attack documents"])
 
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024  # 2 MiB
+ALLOWED_UPLOAD_EXTENSIONS = {".txt", ".md", ".json", ".csv", ".log", ".xml", ".html", ".htm"}
+ALLOWED_UPLOAD_CONTENT_TYPES = {
+    "text/plain",
+    "text/markdown",
+    "text/csv",
+    "text/html",
+    "application/json",
+    "application/xml",
+    "text/xml",
+    "application/octet-stream",  # browsers sometimes send this
+}
 
 
 @router.get("", response_model=AttackDocumentListResponse)
@@ -58,12 +69,31 @@ async def upload_attack_document(
     db: Session = Depends(get_db),
 ):
     """Multipart upload: file is stored on disk; DB keeps relative storage_path."""
-    raw = await file.read()
-    if len(raw) > MAX_UPLOAD_BYTES:
-        from fastapi import HTTPException
+    from pathlib import Path as _Path
+    from fastapi import HTTPException
 
-        raise HTTPException(status_code=400, detail="File too large (max 2 MiB)")
+    from app.core.config import settings
+
+    max_bytes = getattr(settings, "max_upload_bytes", MAX_UPLOAD_BYTES)
     file_name = file.filename or "payload.txt"
+    # Prevent path traversal in client-supplied name
+    file_name = _Path(file_name).name
+    ext = _Path(file_name).suffix.lower()
+    if ext and ext not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type not allowed ({ext}). Allowed: {sorted(ALLOWED_UPLOAD_EXTENSIONS)}",
+        )
+    ctype = (file.content_type or "").split(";")[0].strip().lower()
+    if ctype and ctype not in ALLOWED_UPLOAD_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Content-Type not allowed: {ctype}",
+        )
+
+    raw = await file.read()
+    if len(raw) > max_bytes:
+        raise HTTPException(status_code=400, detail=f"File too large (max {max_bytes} bytes)")
     data = AttackDocumentCreate(
         name=name,
         description=description,

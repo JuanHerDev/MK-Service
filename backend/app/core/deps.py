@@ -39,6 +39,11 @@ def get_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="API key user not found",
             )
+        if user.status and user.status.status_code != "active":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User account is not active",
+            )
         return user
 
     if not credentials:

@@ -17,7 +17,14 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
 
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "http://localhost:3000"
+
+    # Security
+    force_https: bool = False  # True in production behind TLS terminator
+    rate_limit_auth_per_minute: int = 20
+    rate_limit_api_per_minute: int = 120
+    max_upload_bytes: int = 2 * 1024 * 1024  # 2 MiB
+    enable_api_docs: bool = True  # set False in production
 
     # If true, POST /campaigns/{id}/run enqueues RQ job (requires worker).
     # If false or Redis is down, runs probes in-process.
