@@ -75,7 +75,6 @@ def register_owner(
     active = _get_status(db, "active")
     owner_role = _get_role(db, "owner")
 
-    org = Organization(name=organization_name, default_language="es", is_active=True)
     user = User(
         email=email.lower(),
         password_hash=hash_password(password),
@@ -84,8 +83,16 @@ def register_owner(
         user_status_id=active.user_status_id,
         is_verified=True,
     )
-    db.add(org)
     db.add(user)
+    db.flush()
+
+    org = Organization(
+        name=organization_name,
+        default_language="es",
+        is_active=True,
+        founding_user_id=user.user_id,
+    )
+    db.add(org)
     db.flush()
 
     db.add(

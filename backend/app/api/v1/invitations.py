@@ -99,6 +99,14 @@ def list_members(
 
 class MemberRoleUpdate(BaseModel):
     role_code: str = Field(pattern="^(owner|auditor|viewer)$")
+    password: str | None = Field(default=None, description="Required when founding owner grants owner")
+    request_reason: str | None = Field(default=None, description="Required when child owner requests owner grant")
+
+
+class OwnerRequestReview(BaseModel):
+    approve: bool
+    password: str = Field(min_length=1)
+    review_note: str | None = None
 
 
 class MemberActiveUpdate(BaseModel):
@@ -113,13 +121,15 @@ def update_member_role(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """D.5 — Change a member role. Cannot demote the last owner."""
+    """Change a member role. Cannot demote the last owner."""
     return invitation_service.update_member_role(
         db,
         membership=membership,
         member_id=member_id,
         new_role_code=body.role_code,
         actor_user_id=current_user.user_id,
+        password=body.password,
+        request_reason=body.request_reason,
     )
 
 
@@ -131,11 +141,38 @@ def set_member_active(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """D.6 — Activate / deactivate member. Cannot deactivate last owner or yourself."""
+    """Activate / deactivate member. Cannot deactivate last owner or yourself."""
     return invitation_service.set_member_active(
         db,
         membership=membership,
         member_id=member_id,
         is_active=body.is_active,
         actor_user_id=current_user.user_id,
+    )
+
+
+@router.get("/owner-role-requests")
+def list_owner_requests(
+    membership: OrganizationMember = Depends(require_owner_role),
+    db: Session = Depends(get_db),
+):
+    return {"items": invitation_service.list_owner_role_requests(db, membership=membership)}
+
+
+@router.post("/owner-role-requests/{request_id}/review")
+def review_owner_request(
+    request_id: int,
+    body: OwnerRequestReview,
+    membership: OrganizationMember = Depends(require_owner_role),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return invitation_service.review_owner_role_request(
+        db,
+        membership=membership,
+        request_id=request_id,
+        actor_user_id=current_user.user_id,
+        approve=body.approve,
+        password=body.password,
+        review_note=body.review_note,
     )

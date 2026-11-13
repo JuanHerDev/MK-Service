@@ -5,7 +5,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 class InvitationCreate(BaseModel):
     email: EmailStr | None = None
-    role_code: str = Field(default="auditor", pattern="^(owner|auditor|viewer)$")
+    role_code: str = Field(default="auditor", pattern="^(auditor|viewer)$")
     expires_hours: int = Field(default=72, ge=1, le=168)
 
 
