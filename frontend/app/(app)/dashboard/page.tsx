@@ -4,7 +4,7 @@ import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 import { ScrambleText } from "@/components/scramble-text";
-import { Badge, ErrorLine, Loader, PageHeader, Panel, cx } from "@/components/ui";
+import { Badge, ErrorLine, PageHeader, Panel, TableSkeleton, cx } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { CATEGORY_LABEL, fmtRelative, pad } from "@/lib/format";
@@ -21,9 +21,13 @@ const SEV_COLOR: Record<string, string> = {
 const SEV_WEIGHT: Record<string, number> = { critical: 10, high: 6, medium: 3, low: 1 };
 
 async function loadAll() {
-  const [t, c, f, r] = await Promise.allSettled([
+  // Priority 1: targets + campaigns (panel operativo)
+  const [t, c] = await Promise.allSettled([
     api<Paginated<Target>>("/targets", { query: { per_page: 100, active_only: false } }),
     api<Paginated<Campaign>>("/campaigns", { query: { per_page: 100 } }),
+  ]);
+  // Priority 2: findings + reports (riesgo e informes)
+  const [f, r] = await Promise.allSettled([
     api<Paginated<Finding>>("/findings", { query: { per_page: 100 } }),
     api<{ items: Report[]; total: number }>("/reports"),
   ]);
@@ -106,7 +110,18 @@ export default function DashboardPage() {
       />
 
       {loading && !data ? (
-        <Loader />
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Panel key={i}>
+                <TableSkeleton rows={2} cols={1} />
+              </Panel>
+            ))}
+          </div>
+          <Panel title="Actividad" code="ACT">
+            <TableSkeleton rows={5} cols={3} />
+          </Panel>
+        </div>
       ) : (
         <div className="space-y-6">
           {data?.error && <ErrorLine message={data.error} />}

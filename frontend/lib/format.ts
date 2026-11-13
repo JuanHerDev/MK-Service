@@ -35,7 +35,49 @@ export function humanize(code: string) {
 }
 
 export const CATEGORY_LABEL: Record<string, string> = {
-  prompt_injection_direct: "PI · Directa",
-  prompt_injection_indirect: "PI · Indirecta",
-  data_leakage: "Data Leakage",
+  prompt_injection_direct: "Instrucciones engañosas (chat)",
+  prompt_injection_indirect: "Instrucciones ocultas en documentos",
+  data_leakage: "Filtración de información",
 };
+
+/** Log actions in everyday language */
+export const ACTION_LABEL: Record<string, string> = {
+  "invite.created": "Se envió una invitación",
+  "invite.revoked": "Se canceló una invitación",
+  "invite.accepted": "Alguien aceptó una invitación",
+  "member.role_changed": "Se cambió el rol de un miembro",
+  "member.activated": "Se activó un miembro",
+  "member.deactivated": "Se desactivó un miembro",
+  "api_key.created": "Se creó una clave de acceso",
+  "api_key.revoked": "Se revocó una clave de acceso",
+  "campaign.run": "Se ejecutó una auditoría",
+  "campaign.created": "Se creó una auditoría",
+  "report.generated": "Se generó un informe",
+  "admin.member_patched": "Admin de plataforma modificó un miembro",
+  "target.created": "Se registró un sistema a auditar",
+  "target.updated": "Se actualizó un sistema a auditar",
+  "target.tested": "Se probó la conexión a un sistema",
+};
+
+/** Tipos de recurso del log en lenguaje cotidiano. */
+export const RESOURCE_LABEL: Record<string, string> = {
+  membership: "Miembro del equipo",
+  invitation: "Invitación",
+  api_key: "Clave de acceso",
+  campaign: "Auditoría",
+  report: "Informe",
+  target: "Sistema auditado",
+  attack_document: "Documento de prueba",
+  organization: "Organización",
+  user: "Usuario",
+};
+
+export function labelAction(code: string | null | undefined): string {
+  if (!code) return "—";
+  return ACTION_LABEL[code] ?? code.replace(/[._]/g, " ");
+}
+
+export function labelResource(code: string | null | undefined): string {
+  if (!code) return "—";
+  return RESOURCE_LABEL[code] ?? code.replace(/_/g, " ");
+}

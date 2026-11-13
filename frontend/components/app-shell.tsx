@@ -8,6 +8,7 @@ import {
   LogOut,
   Menu,
   Radar,
+  Shield,
   ShieldAlert,
   Syringe,
   Users,
@@ -31,7 +32,8 @@ const NAV = [
   { href: "/reports", label: "Reportes", code: "05", icon: FileText },
   { href: "/api-keys", label: "API Keys", code: "06", icon: KeyRound },
   { href: "/members", label: "Miembros", code: "07", icon: Users },
-  { href: "/audit", label: "Auditoría", code: "08", icon: ScrollText },
+  { href: "/logs", label: "Log", code: "08", icon: ScrollText },
+  { href: "/admin", label: "Admin", code: "09", icon: Shield, adminOnly: true },
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -83,7 +85,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex-1 space-y-px overflow-y-auto px-3 py-5">
         <p className="label px-2 pb-3">Módulos</p>
-        {NAV.map(({ href, label, code, icon: Icon }) => {
+        {(user.is_platform_admin ? NAV : NAV.filter((i) => !("adminOnly" in i && i.adminOnly))).map(({ href, label, code, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Link

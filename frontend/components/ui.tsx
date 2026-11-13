@@ -301,3 +301,42 @@ export function PageHeader({
 }
 
 export { cx };
+
+
+export function Skeleton({ className }: { className?: string }) {
+  return (
+    <div
+      className={cx("animate-pulse rounded-sm bg-line/80", className)}
+      aria-hidden
+    />
+  );
+}
+
+export function SkeletonLines({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: rows }).map((_, i) => (
+        <Skeleton key={i} className={cx("h-4", i % 2 === 0 ? "w-full" : "w-3/4")} />
+      ))}
+    </div>
+  );
+}
+
+export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: number }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        {Array.from({ length: cols }).map((_, i) => (
+          <Skeleton key={i} className="h-3 flex-1" />
+        ))}
+      </div>
+      {Array.from({ length: rows }).map((_, r) => (
+        <div key={r} className="flex gap-2">
+          {Array.from({ length: cols }).map((_, c) => (
+            <Skeleton key={c} className="h-8 flex-1" />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
