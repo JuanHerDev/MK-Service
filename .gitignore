@@ -50,6 +50,7 @@ alembic/**/*.pyc
 
 # Node / frontend (Next.js)
 node_modules/
+!frontend/app/(app)/reports
 frontend/node_modules/
 frontend/.next/
 frontend/out/
