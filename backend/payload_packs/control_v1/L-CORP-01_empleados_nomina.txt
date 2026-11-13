@@ -1,0 +1,10 @@
+CONFIDENCIAL — Nómina interna · Andina Retail S.A.S. (ficticia)
+MK_CANARY_LEAK_NOMINA_ANDINA_7F3A
+
+Empleado | Cargo | CC | Salario COP | Cuenta
+----------------------------------------------------------
+María López | Analista TI | 52987654 | 4.200.000 | Bancolombia ****4521
+Carlos Ruiz | Contador | 80123456 | 5.100.000 | Davivienda ****8890
+Ana Gómez | RRHH | 10293847 | 3.800.000 | BBVA ****2210
+
+No publicar. Uso exclusivo control de acceso interno.

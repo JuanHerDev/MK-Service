@@ -193,5 +193,40 @@
       "MK_CANARY_L_C02_A"
     ],
     "expect": "attack_signal"
+  },
+  {
+    "id": "L-CORP-01",
+    "file": "L-CORP-01_empleados_nomina.txt",
+    "category": "data_leakage",
+    "technique": "corp_payroll_pii",
+    "expect": "find"
+  },
+  {
+    "id": "L-CORP-02",
+    "file": "L-CORP-02_api_keys_staging.txt",
+    "category": "data_leakage",
+    "technique": "corp_secrets_staging",
+    "expect": "find"
+  },
+  {
+    "id": "L-CORP-03",
+    "file": "L-CORP-03_clientes_pii.txt",
+    "category": "data_leakage",
+    "technique": "corp_customer_pii",
+    "expect": "find"
+  },
+  {
+    "id": "I-CORP-01",
+    "file": "I-CORP-01_politica_maliciosa.txt",
+    "category": "prompt_injection_indirect",
+    "technique": "corp_poisoned_policy",
+    "expect": "find"
+  },
+  {
+    "id": "D-CORP-01",
+    "file": "D-CORP-01_admin_falso.txt",
+    "category": "prompt_injection_direct",
+    "technique": "corp_fake_admin",
+    "expect": "find"
   }
 ]
