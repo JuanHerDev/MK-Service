@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.audit_event import AuditEvent
@@ -52,26 +53,40 @@ def list_events(
     email: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    resource_type: str | None = None,
+    q: str | None = None,
 ) -> list[AuditEvent]:
-    q = (
+    query = (
         db.query(AuditEvent)
         .filter(AuditEvent.organization_id == organization_id)
         .order_by(AuditEvent.audit_event_id.desc())
     )
     if action:
-        q = q.filter(AuditEvent.action == action)
+        query = query.filter(AuditEvent.action == action)
     if actor_user_id is not None:
-        q = q.filter(AuditEvent.actor_user_id == actor_user_id)
+        query = query.filter(AuditEvent.actor_user_id == actor_user_id)
     if email:
         email_l = email.strip().lower()
-        q = q.join(User, AuditEvent.actor_user_id == User.user_id).filter(
+        query = query.join(User, AuditEvent.actor_user_id == User.user_id).filter(
             User.email.ilike(f"%{email_l}%")
         )
+    if resource_type:
+        query = query.filter(AuditEvent.resource_type == resource_type.strip())
     if date_from is not None:
-        q = q.filter(AuditEvent.created_at >= date_from)
+        query = query.filter(AuditEvent.created_at >= date_from)
     if date_to is not None:
-        q = q.filter(AuditEvent.created_at <= date_to)
-    return q.limit(min(limit, 200)).all()
+        query = query.filter(AuditEvent.created_at <= date_to)
+    if q and q.strip():
+        term = f"%{q.strip()}%"
+        query = query.filter(
+            or_(
+                AuditEvent.action.ilike(term),
+                AuditEvent.summary.ilike(term),
+                AuditEvent.resource_type.ilike(term),
+                AuditEvent.resource_id.ilike(term),
+            )
+        )
+    return query.limit(min(limit, 200)).all()
 
 
 def list_actors(db: Session, *, organization_id: int) -> list[dict]:

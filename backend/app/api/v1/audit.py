@@ -35,16 +35,18 @@ class AuditActorOut(BaseModel):
 
 @router.get("", response_model=list[AuditEventOut])
 def list_audit_events(
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=200),
     action: str | None = Query(None),
     actor_user_id: int | None = Query(None),
     email: str | None = Query(None, description="Filter by actor email (partial)"),
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
+    resource_type: str | None = Query(None),
+    q: str | None = Query(None, description="Free-text search in action/summary/resource"),
     membership: OrganizationMember = Depends(require_roles("owner", "auditor", "admin")),
     db: Session = Depends(get_db),
 ):
-    """Historial de la organización. Owner / auditor / admin."""
+    """History of the organization. Owner / auditor / admin."""
     rows = audit_service.list_events(
         db,
         organization_id=membership.organization_id,
@@ -54,6 +56,8 @@ def list_audit_events(
         email=email,
         date_from=date_from,
         date_to=date_to,
+        resource_type=resource_type,
+        q=q,
     )
     return audit_service.enrich_events(db, rows)
 
