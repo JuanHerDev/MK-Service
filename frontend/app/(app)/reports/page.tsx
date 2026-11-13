@@ -79,7 +79,7 @@ export default function ReportsPage() {
 
   async function handleDownload(r: Report) {
     if (r.report_status !== "ready") {
-      setActionError("El reporte aún no está listo para descargar");
+      setActionError("El informe aún no está listo para descargar");
       return;
     }
     setDownloadingId(r.report_id);
@@ -89,7 +89,7 @@ export default function ReportsPage() {
       await downloadReport(r.report_id, suggested);
       setNotice(`Descarga iniciada: RPT-${pad(r.report_id, 3)}`);
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "No se pudo descargar el reporte");
+      setActionError(e instanceof Error ? e.message : "No se pudo descargar el informe");
     } finally {
       setDownloadingId(null);
     }
@@ -100,7 +100,7 @@ export default function ReportsPage() {
       <PageHeader
         index="05"
         subtitle="Entregables"
-        title="Reportes"
+        title="Informes"
         actions={
           <div className="flex flex-wrap gap-2">
             <Button size="md" onClick={() => reload()} title="Actualizar">
@@ -108,7 +108,7 @@ export default function ReportsPage() {
             </Button>
             {writable && (
               <Button variant="primary" onClick={() => setCreating(true)}>
-                <Plus className="size-4" /> Generar reporte
+                <Plus className="size-4" /> Generar informe
               </Button>
             )}
           </div>
@@ -170,12 +170,12 @@ export default function ReportsPage() {
         ) : items.length === 0 ? (
           <Panel>
             <EmptyState
-              title="Sin reportes"
+              title="Sin informes"
               hint="Genera un informe técnico o ejecutivo desde una campaña completada."
               action={
                 writable && (
                   <Button variant="primary" onClick={() => setCreating(true)}>
-                    <Plus className="size-4" /> Generar reporte
+                    <Plus className="size-4" /> Generar informe
                   </Button>
                 )
               }
@@ -336,16 +336,16 @@ function GenerateReportModal({
         method: "POST",
         body: { report_type: reportType, language },
       });
-      await onCreated(`Reporte RPT-${pad(report.report_id, 3)} generado`);
+      await onCreated(`Informe RPT-${pad(report.report_id, 3)} generado`);
     } catch (err) {
-      onError(err instanceof Error ? err.message : "No se pudo generar el reporte");
+      onError(err instanceof Error ? err.message : "No se pudo generar el informe");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Generar reporte" code="RPT+">
+    <Modal open={open} onClose={onClose} title="Generar informe" code="RPT+">
       <form onSubmit={submit} className="space-y-5">
         <p className="text-sm text-muted">
           Se genera un PDF (ejecutivo o técnico) con los hallazgos de la campaña. Luego puedes verlo en vista previa o
@@ -492,7 +492,7 @@ function ReportPreviewModal({
         {objectUrl && !loading && (
           <div className="relative min-h-0 w-full flex-1 overflow-hidden border border-line bg-void">
             <iframe
-              title="Vista previa del reporte PDF"
+              title="Vista previa del informe PDF"
               src={`${objectUrl}#view=FitH`}
               className="absolute inset-0 h-full w-full border-0 bg-white"
             />

@@ -131,11 +131,11 @@ export default function CampaignsPage() {
       <PageHeader
         index="02"
         subtitle="Operaciones ofensivas"
-        title="Campañas"
+        title="Auditorías"
         actions={
           writable && (
             <Button variant="primary" onClick={() => setCreating(true)}>
-              <Plus className="size-4" /> Nueva campaña
+              <Plus className="size-4" /> Nueva auditoría
             </Button>
           )
         }
@@ -191,13 +191,13 @@ export default function CampaignsPage() {
         ) : shown.length === 0 ? (
           <Panel>
             <EmptyState
-              title="Sin campañas"
-              hint={targets.length ? "Lanza una campaña contra uno de tus targets." : "Primero registra un target."}
+              title="Sin auditorías"
+              hint={targets.length ? "Lanza una auditoría contra uno de tus targets." : "Primero registra un target."}
               action={
                 writable &&
                 (targets.length ? (
                   <Button variant="primary" onClick={() => setCreating(true)}>
-                    <Plus className="size-4" /> Nueva campaña
+                    <Plus className="size-4" /> Nueva auditoría
                   </Button>
                 ) : (
                   <Link href="/targets" className="font-mono text-xs text-accent uppercase">
@@ -213,7 +213,7 @@ export default function CampaignsPage() {
               <table className="w-full min-w-[860px] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left">
-                    {["ID", "Campaña", "Target", "Alcance", "Progreso", "Estado", "Creada", ""].map((h) => (
+                    {["N.º", "Auditoría", "Sistema", "Alcance", "Progreso", "Estado", "Creada", ""].map((h) => (
                       <th key={h} className="label px-4 py-3 font-normal">
                         {h}
                       </th>
@@ -279,7 +279,7 @@ export default function CampaignsPage() {
                                   act(
                                     c.campaign_id,
                                     () => api(`/campaigns/${c.campaign_id}/run`, { method: "POST" }),
-                                    `Campaña #${c.campaign_id} encolada — el worker la procesará`,
+                                    `Auditoría #${c.campaign_id} encolada — el worker la procesará`,
                                   )
                                 }
                               >
@@ -467,10 +467,10 @@ function CompareModal({
       {!campaign ? null : (
         <div className="space-y-4">
           <p className="text-sm text-muted">
-            Diff de hallazgos confirmados respecto a la campaña base (parent del re-run u otro id).
+            Diff de hallazgos confirmados respecto a la auditoría base (parent del re-run u otro id).
             {campaign.parent_campaign_id
               ? ` Parent por defecto: #${pad(campaign.parent_campaign_id, 3)}.`
-              : " Esta campaña no es re-run: indica el id base."}
+              : " Esta auditoría no es re-run: indica el id base."}
           </p>
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Baseline (opcional)">
@@ -594,7 +594,7 @@ function CampaignTimeline({ c }: { c: Campaign }) {
     },
     {
       key: "probes",
-      label: "Probes / hallazgos",
+      label: "Pruebas y problemas encontrados",
       done: c.progress_percent >= 50 || ["completed", "failed"].includes(c.status),
       at: c.started_at,
     },
@@ -735,8 +735,8 @@ function CampaignModal({
       onClose();
       onDone(
         form.run_now
-          ? `Campaña "${created.name}" encolada — revisa que el worker RQ esté activo`
-          : `Campaña "${created.name}" creada (queued)`,
+          ? `Auditoría "${created.name}" encolada — revisa que el worker RQ esté activo`
+          : `Auditoría "${created.name}" creada (queued)`,
       );
     } catch (err) {
       setError((err as Error).message);
@@ -746,9 +746,9 @@ function CampaignModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Lanzar campaña" code="OPS+" wide>
+    <Modal open={open} onClose={onClose} title="Lanzar auditoría" code="OPS+" wide>
       {targets.length === 0 ? (
-        <EmptyState title="Sin targets activos" hint="Registra un target antes de crear una campaña." />
+        <EmptyState title="Sin targets activos" hint="Registra un target antes de crear una auditoría." />
       ) : (
         <form onSubmit={submit} className="space-y-5">
           <div className="grid gap-5 sm:grid-cols-2">
@@ -760,7 +760,7 @@ function CampaignModal({
                 placeholder="Auditoría Q4"
               />
             </Field>
-            <Field label="Target">
+            <Field label="Sistema a auditar">
               <Select value={targetId} onChange={(e) => setForm({ ...form, target_id: Number(e.target.value) })}>
                 {targets.map((t) => (
                   <option key={t.target_id} value={t.target_id}>
@@ -849,7 +849,7 @@ function CampaignModal({
             </p>
           </div>
           <div className="space-y-2">
-            <span className="label">Payloads</span>
+            <span className="label">Documentos de prueba</span>
             {docs.loading ? (
               <Loader label="Cargando payloads" />
             ) : (
@@ -1018,7 +1018,7 @@ function CampaignDetailModal({
     <Modal
       open={!!campaign}
       onClose={onClose}
-      title={detail ? `Campaña #${pad(detail.campaign_id, 3)} · ${detail.name}` : "Detalle de campaña"}
+      title={detail ? `Auditoría #${pad(detail.campaign_id, 3)} · ${detail.name}` : "Detalle de auditoría"}
       code="CMP·"
       wide
     >
@@ -1032,7 +1032,7 @@ function CampaignDetailModal({
               <p className="font-mono text-fg">{detail.status}</p>
             </div>
             <div>
-              <p className="label text-dim">Target</p>
+              <p className="label text-dim">Sistema</p>
               <p className="text-fg">{detail.target_name || `Target #${detail.target_id}`}</p>
             </div>
             <div>
@@ -1069,7 +1069,7 @@ function CampaignDetailModal({
 
           {detail.parent && (
             <div className="border border-line bg-ink/50 p-4">
-              <p className="label mb-2 text-dim">Campaña padre (re-run de)</p>
+              <p className="label mb-2 text-dim">Auditoría padre (re-run de)</p>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-fg">

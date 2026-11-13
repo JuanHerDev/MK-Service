@@ -61,8 +61,8 @@ export default function FindingsPage() {
     <>
       <PageHeader
         index="03"
-        subtitle="Backlog de vulnerabilidades"
-        title="Hallazgos"
+        subtitle="Resultados de las pruebas"
+        title="Problemas encontrados"
         actions={
           <div className="flex gap-2">
             <Select

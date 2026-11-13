@@ -97,14 +97,14 @@ export default function DashboardPage() {
     <>
       <PageHeader
         index="00"
-        subtitle="Centro de operaciones"
+        subtitle="Resumen"
         title={`Hola, ${firstName}`}
         actions={
           <Link
             href="/campaigns?new=1"
             className="inline-flex h-10 items-center gap-2 bg-accent px-4 font-mono text-[11px] tracking-[0.14em] text-void uppercase transition hover:shadow-[0_0_24px_rgb(212_255_63/0.45)]"
           >
-            Nueva campaña <ArrowUpRight className="size-4" />
+            Nueva auditoría <ArrowUpRight className="size-4" />
           </Link>
         }
       />
@@ -129,19 +129,19 @@ export default function DashboardPage() {
           {/* KPI row */}
           <div className="grid grid-cols-2 gap-px border border-line bg-line lg:grid-cols-4">
             <Kpi
-              label="Targets conectados"
+              label="Sistemas conectados"
               value={stats.activeTargets}
               sub={`de ${stats.targets.length} registrados`}
               index={1}
             />
             <Kpi
-              label="Campañas"
+              label="Auditorías"
               value={stats.campaigns.length}
               sub={`${stats.running} en cola / ejecución`}
               index={2}
             />
             <Kpi
-              label="Hallazgos abiertos"
+              label="Problemas abiertos"
               value={stats.openFindings.length}
               sub={`${stats.findings.length} totales`}
               index={3}
@@ -187,7 +187,7 @@ export default function DashboardPage() {
               actions={
                 <div className="flex gap-4 font-mono text-[10px] tracking-[0.12em] text-muted uppercase">
                   <span className="flex items-center gap-1.5">
-                    <span className="size-2 bg-fg/70" /> Campañas
+                    <span className="size-2 bg-fg/70" /> Auditorías
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="size-2 bg-accent" /> Hallazgos
@@ -200,9 +200,9 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[1.9fr_1.1fr]">
-            <Panel title="Campañas recientes" code="C-03" bodyClassName="p-0" actions={<PanelLink href="/campaigns" />}>
+            <Panel title="Auditorías recientes" code="C-03" bodyClassName="p-0" actions={<PanelLink href="/campaigns" />}>
               {stats.campaigns.length === 0 ? (
-                <p className="p-6 text-sm text-muted">Aún no hay campañas. Crea un target y lanza la primera.</p>
+                <p className="p-6 text-sm text-muted">Aún no hay auditorías. Crea un target y lanza la primera.</p>
               ) : (
                 <ul className="divide-y divide-line">
                   {stats.campaigns.slice(0, 6).map((c) => (
@@ -228,9 +228,9 @@ export default function DashboardPage() {
               )}
             </Panel>
 
-            <Panel title="Vectores de ataque" code="V-04">
+            <Panel title="Tipos de problema" code="V-04">
               {Object.keys(stats.byCat).length === 0 ? (
-                <p className="text-sm text-muted">Sin hallazgos registrados todavía.</p>
+                <p className="text-sm text-muted">Sin problemas registrados todavía.</p>
               ) : (
                 <div className="space-y-5">
                   {Object.entries(stats.byCat).map(([cat, n]) => (
@@ -258,13 +258,13 @@ export default function DashboardPage() {
           </div>
 
           <Panel
-            title="Hallazgos prioritarios"
+            title="Problemas prioritarios"
             code="F-05"
             bodyClassName="p-0"
             actions={<PanelLink href="/findings" />}
           >
             {stats.openFindings.length === 0 ? (
-              <p className="p-6 text-sm text-muted">Sin hallazgos abiertos. Superficie limpia.</p>
+              <p className="p-6 text-sm text-muted">Sin problemas abiertos. Superficie limpia.</p>
             ) : (
               <ul className="divide-y divide-line">
                 {[...stats.openFindings]

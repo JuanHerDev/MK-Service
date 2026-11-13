@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MK-Service · Control",
-  description: "Auditoría de vulnerabilidades en sistemas RAG (Prompt Injection y Data Leakage)",
+  title: "MK Service · Control",
+  description: "Auditoría de sistemas de IA: detecta instrucciones engañosas y filtración de información",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -65,12 +65,12 @@ export default function ApiKeysPage() {
     <>
       <PageHeader
         index="06"
-        subtitle="Integraciones"
-        title="API Keys"
+        subtitle="Acceso externo"
+        title="Claves de acceso"
         actions={
           writable && (
             <Button variant="primary" onClick={() => setCreating(true)}>
-              <Plus className="size-4" /> Nueva clave
+              <Plus className="size-4" /> Crear clave
             </Button>
           )
         }
@@ -78,7 +78,7 @@ export default function ApiKeysPage() {
 
       <Panel className="mb-4 border-line">
         <p className="text-sm text-muted">
-          Las API Keys permiten que <strong className="text-fg">sistemas externos</strong> (CI/CD, scripts,
+          Las claves de acceso permiten que <strong className="text-fg">sistemas externos</strong> (CI/CD, scripts,
           otros backends) llamen a MK Service sin login interactivo. El secreto se muestra{" "}
           <strong className="text-fg">solo una vez</strong> al crear; después solo verás el prefijo.
           Usa el header <code className="font-mono text-xs text-accent">X-API-Key</code>.
@@ -95,7 +95,7 @@ export default function ApiKeysPage() {
         ) : items.length === 0 ? (
           <Panel>
             <EmptyState
-              title="Sin API Keys"
+              title="Sin claves de acceso"
               hint={writable ? "Crea una clave para automatizar auditorías desde CI o scripts." : "Solo lectura."}
             />
           </Panel>
@@ -209,7 +209,7 @@ function CreateKeyModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Nueva API Key" code="KEY+">
+    <Modal open={open} onClose={onClose} title="Nueva clave de acceso" code="KEY+">
       <form onSubmit={submit} className="grid gap-5">
         <Field label="Nombre" hint="ej. CI GitHub Actions, script nightly">
           <Input required value={name} onChange={(e) => setName(e.target.value)} placeholder="pipeline-prod" />
@@ -235,7 +235,7 @@ function CreateKeyModal({
 function RevealSecretModal({ secret, onClose }: { secret: string | null; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   if (!secret) return null;
-  const secretValue = secret;
+  const secretValue = secret; // narrowed for nested closures (TS)
 
   async function copy() {
     try {
@@ -247,7 +247,7 @@ function RevealSecretModal({ secret, onClose }: { secret: string | null; onClose
   }
 
   return (
-    <Modal open={!!secret} onClose={onClose} title="Secreto de la API Key" code="KEY!">
+    <Modal open={!!secret} onClose={onClose} title="Guarda esta clave (solo se muestra una vez)" code="KEY!">
       <div className="space-y-4">
         <p className="text-sm text-muted">
           Guárdala en un gestor de secretos. <strong className="text-fg">No se volverá a mostrar</strong>.

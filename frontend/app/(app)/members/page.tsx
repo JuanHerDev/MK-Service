@@ -67,11 +67,11 @@ export default function MembersPage() {
   if (!allowed) {
     return (
       <>
-        <PageHeader index="07" subtitle="Organización" title="Miembros" />
+        <PageHeader index="07" subtitle="Organización" title="Equipo" />
         <Panel>
           <EmptyState
             title="Acceso restringido"
-            hint="Solo el Owner puede gestionar miembros e invitaciones."
+            hint="Solo el responsable de la organización puede gestionar el equipo e invitaciones."
           />
         </Panel>
       </>
@@ -126,7 +126,7 @@ export default function MembersPage() {
       <PageHeader
         index="07"
         subtitle="Organización"
-        title="Miembros"
+        title="Equipo"
         actions={
           <div className="flex gap-2">
             <a href="/audit">

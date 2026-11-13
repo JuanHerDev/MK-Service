@@ -24,16 +24,16 @@ import { Loader, cx } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 
 const NAV = [
-  { href: "/dashboard", label: "Panel", code: "00", icon: LayoutGrid },
-  { href: "/targets", label: "Targets", code: "01", icon: Crosshair },
-  { href: "/campaigns", label: "Campañas", code: "02", icon: Radar },
-  { href: "/findings", label: "Hallazgos", code: "03", icon: ShieldAlert },
-  { href: "/documents", label: "Payloads", code: "04", icon: Syringe },
-  { href: "/reports", label: "Reportes", code: "05", icon: FileText },
-  { href: "/api-keys", label: "API Keys", code: "06", icon: KeyRound },
-  { href: "/members", label: "Miembros", code: "07", icon: Users },
-  { href: "/logs", label: "Log", code: "08", icon: ScrollText },
-  { href: "/admin", label: "Admin", code: "09", icon: Shield, adminOnly: true },
+  { href: "/dashboard", label: "Inicio", code: "00", icon: LayoutGrid },
+  { href: "/targets", label: "Sistemas", code: "01", icon: Crosshair },
+  { href: "/campaigns", label: "Auditorías", code: "02", icon: Radar },
+  { href: "/findings", label: "Problemas", code: "03", icon: ShieldAlert },
+  { href: "/documents", label: "Pruebas", code: "04", icon: Syringe },
+  { href: "/reports", label: "Informes", code: "05", icon: FileText },
+  { href: "/api-keys", label: "Claves", code: "06", icon: KeyRound },
+  { href: "/members", label: "Equipo", code: "07", icon: Users },
+  { href: "/logs", label: "Actividad", code: "08", icon: ScrollText },
+  { href: "/admin", label: "Administración", code: "09", icon: Shield, adminOnly: true },
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {

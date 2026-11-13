@@ -39,7 +39,7 @@ export default function DocumentsPage() {
   const [previewId, setPreviewId] = useState<number | null>(null);
 
   async function remove(d: AttackDocument) {
-    if (!confirm(`¿Desactivar el payload "${d.name}"?`)) return;
+    if (!confirm(`¿Desactivar el documento "${d.name}"?`)) return;
     setActionError(null);
     try {
       await api(`/attack-documents/${d.attack_document_id}`, { method: "DELETE" });
@@ -55,12 +55,12 @@ export default function DocumentsPage() {
     <>
       <PageHeader
         index="04"
-        subtitle="Arsenal"
-        title="Payloads"
+        subtitle="Material de prueba"
+        title="Documentos de prueba"
         actions={
           canEditOrg && (
             <Button variant="primary" onClick={() => setCreating(true)}>
-              <Plus className="size-4" /> Nuevo payload
+              <Plus className="size-4" /> Nuevo documento
             </Button>
           )
         }
@@ -83,7 +83,7 @@ export default function DocumentsPage() {
 
       <Panel className="mb-4">
         <p className="text-sm text-muted">
-          Owner y Auditor ven payloads <strong className="text-fg">globales</strong> y de su{" "}
+          Owner y Auditor ven documentos <strong className="text-fg">globales</strong> y de su{" "}
           <strong className="text-fg">organización</strong>. Solo pueden crear/borrar los de organización.
           {admin ? " Como platform admin también gestionas los globales." : ""} Cada archivo debe incluir al menos un
           token <code className="text-accent">MK_CANARY_...</code> para hallazgos confirmados.
@@ -96,7 +96,7 @@ export default function DocumentsPage() {
           <Loader />
         ) : items.length === 0 ? (
           <Panel>
-            <EmptyState title="Arsenal vacío" hint="Los payloads globales se cargan con el seed del backend." />
+            <EmptyState title="Aún no hay documentos de prueba" hint="Los documentos generales se cargan al iniciar el sistema." />
           </Panel>
         ) : (
           <div className="grid gap-px border border-line bg-line sm:grid-cols-2 xl:grid-cols-3">
@@ -152,7 +152,7 @@ export default function DocumentsPage() {
                       type="button"
                       onClick={() => remove(d)}
                       className="text-muted transition hover:text-critical"
-                      aria-label="Desactivar payload"
+                      aria-label="Desactivar documento"
                     >
                       <Trash2 className="size-4" />
                     </button>
@@ -186,7 +186,7 @@ function PreviewPayloadModal({ documentId, onClose }: { documentId: number | nul
   );
 
   return (
-    <Modal open={!!documentId} onClose={onClose} title={data?.name ?? "Payload"} code="VIEW" wide>
+    <Modal open={!!documentId} onClose={onClose} title={data?.name ?? "Documento"} code="VIEW" wide>
       {loading && <Loader />}
       <ErrorLine message={error} />
       {data && (
@@ -203,7 +203,7 @@ function PreviewPayloadModal({ documentId, onClose }: { documentId: number | nul
             </p>
           ) : (
             <p className="text-sm text-critical">
-              Sin token MK_CANARY_* — este payload no podrá generar hallazgos confirmados.
+              Sin token MK_CANARY_* — este documento no podrá generar hallazgos confirmados.
             </p>
           )}
           <pre className="max-h-[50vh] overflow-auto border border-line bg-black/40 p-4 font-mono text-xs whitespace-pre-wrap text-fg">
@@ -267,7 +267,7 @@ function CreateDocumentModal({
           },
         });
       } else {
-        setError("Sube un archivo o escribe el contenido del payload");
+        setError("Sube un archivo o escribe el contenido del documento");
         setBusy(false);
         return;
       }
@@ -288,7 +288,7 @@ function CreateDocumentModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Registrar payload" code="PLD+" wide>
+    <Modal open={open} onClose={onClose} title="Registrar documento de prueba" code="PLD+" wide>
       <form onSubmit={submit} className="grid gap-5 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <Field label="Nombre">
@@ -335,7 +335,7 @@ function CreateDocumentModal({
           </Field>
         </div>
         <div className="sm:col-span-2">
-          <Field label="O pegar contenido" hint="si no subes archivo; se guarda en storage/payloads/">
+          <Field label="O pegar contenido" hint="si no subes archivo; se guarda en storage/documentos/">
             <Textarea
               value={contentText}
               onChange={(e) => {

@@ -59,16 +59,16 @@ export default function TargetsPage() {
     <>
       <PageHeader
         index="01"
-        subtitle="Superficie de ataque"
-        title="Targets"
+        subtitle="Conexiones"
+        title="Sistemas a auditar"
         actions={
           <>
             <Button size="md" onClick={() => setShowInactive((s) => !s)}>
-              {showInactive ? "Solo activos" : "Ver inactivos"}
+              {showInactive ? "Solo conectados" : "Ver desactivados"}
             </Button>
             {writable && (
               <Button variant="primary" onClick={() => setCreating(true)}>
-                <Plus className="size-4" /> Nuevo target
+                <Plus className="size-4" /> Nuevo sistema
               </Button>
             )}
           </>
