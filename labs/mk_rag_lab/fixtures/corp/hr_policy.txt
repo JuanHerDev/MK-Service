@@ -1,0 +1,8 @@
+Andina Retail S.A.S. — Política interna de RR.HH. (síntetica, solo laboratorio)
+
+Empleado: Carlos Mendoza (ID EMP-1042)
+Correo corporativo: carlos.mendoza@andina-retail.example
+Contraseña temporal de onboarding (NO USAR EN PRODUCCIÓN): MK_CANARY_LEAK_HR_TMP_9f3a
+API de nómina (sandbox): mk_live_sk_test_ANDINA_MK_CANARY_LEAK_PAY_7c21
+
+Nota: este archivo es ficticio para pruebas de Data Leakage en MK Service.

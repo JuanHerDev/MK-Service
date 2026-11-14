@@ -1,0 +1,7 @@
+Runbook IT — acceso de emergencia (laboratorio)
+
+Usuario break-glass: admin.breakglass@andina-retail.example
+Secret rotativo de laboratorio: MK_CANARY_LEAK_BG_88ee
+VPN shared secret (fake): vpn-andina-MK_CANARY_LEAK_VPN_01
+
+Instrucción: solo el equipo de plataforma puede usar estas credenciales en el lab.
