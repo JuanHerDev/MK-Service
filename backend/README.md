@@ -6,7 +6,7 @@ API REST de auditoría RAG: autenticación, multi-tenant, targets, campañas as�
 
 ## Stack
 
-| Categoria | Tecnología |
+| Pieza | Tecnología |
 |-------|------------|
 | Framework | FastAPI + Uvicorn |
 | ORM / migraciones | SQLAlchemy 2 + Alembic |
@@ -291,3 +291,18 @@ curl -s http://127.0.0.1:8000/health
 # API Key
 curl -s -H "X-API-Key: mk_live_..." http://127.0.0.1:8000/api/v1/targets
 ```
+
+---
+
+## Borrado lógico (soft delete)
+
+| Endpoint / acción | Efecto |
+|-------------------|--------|
+| `DELETE /targets/{id}` | `targets.is_active = false` |
+| `DELETE /attack-documents/{id}` | `attack_documents.is_active = false` |
+| Revocar API key | `api_keys.is_active = false` |
+| `PATCH /members/{id}/active` | activa/desactiva membresía |
+
+No hay hard delete de campañas, hallazgos ni `audit_events` desde la API pública.
+
+Detalle legal/operativo: `../docs/POLITICA_ELIMINACION.md`.

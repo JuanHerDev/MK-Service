@@ -172,3 +172,13 @@ style(frontend): ...
 
 Vista general y arranque conjunto: [`../README.md`](../README.md).  
 API, worker y mock: [`../backend/README.md`](../backend/README.md).
+
+---
+
+## Responsive (móvil)
+
+- `PageHeader`: en pantallas pequeñas el bloque de **acciones** ocupa el ancho completo debajo del título (`flex-wrap`), sin desbordar horizontalmente.
+- Tablas: contenedor `TableScroll`; en campañas la celda de acciones usa `sticky right` + `RowActions` para mantener botones visibles mientras se desplaza el resto de columnas.
+- Shell: más padding inferior en `main` (`pb-24` en móvil) para que la última fila de botones no quede bajo la barra del navegador.
+
+Componentes: `components/ui.tsx` (`PageHeader`, `TableScroll`, `RowActions`, `stickyActionsTd` / `Th`).

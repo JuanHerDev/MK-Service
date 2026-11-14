@@ -350,3 +350,26 @@ git push origin v0.2.0
 ## Equipo / uso
 
 Proyecto académico-comercial (ETITC) — MK Service. Uso interno del equipo y demos controladas.
+
+---
+
+## Documentación adicional
+
+| Documento | Contenido |
+|-----------|-----------|
+| `docs/POLITICA_ELIMINACION.md` | Borrado lógico vs físico, retención y Ley 1581 de 2012 |
+| `docs/academic/` | Documentos de clase (DB, research, general) |
+| `docs/architecture/` | SRS, SAD, manual de API |
+| `backend/README.md` | API, worker, storage, seeds |
+| `frontend/README.md` | Next.js, env, rutas |
+| `labs/mk_rag_lab/README.md` | Laboratorio RAG vulnerable / proxy |
+
+### UI móvil
+
+- Cabeceras de página: título y botones de acción apilan; los botones no se salen del ancho útil.
+- Tablas densas: scroll horizontal; en **Campañas** la columna de acciones queda **fija a la derecha** (`sticky`) para operar sin perder los botones.
+- `main` con padding inferior extra en móvil para no tapar acciones con gestos del sistema.
+
+### Eliminación de datos
+
+Ver `docs/POLITICA_ELIMINACION.md`. Resumen: desactivación (`is_active`), no borrado duro de evidencia de auditoría en el MVP.
