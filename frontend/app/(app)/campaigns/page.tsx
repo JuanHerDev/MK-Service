@@ -14,6 +14,10 @@ import {
   Loader,
   Modal,
   PageHeader,
+  RowActions,
+  TableScroll,
+  stickyActionsTd,
+  stickyActionsTh,
   Panel,
   Select,
   cx,
@@ -209,12 +213,18 @@ export default function CampaignsPage() {
           </Panel>
         ) : (
           <Panel bodyClassName="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-sm">
+            <TableScroll><table className="w-full min-w-[720px] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left">
-                    {["N.º", "Auditoría", "Sistema", "Alcance", "Progreso", "Estado", "Creada", ""].map((h) => (
-                      <th key={h} className="label px-4 py-3 font-normal">
+                    {["N.º", "Auditoría", "Sistema", "Alcance", "Progreso", "Estado", "Creada", ""].map((h, i, arr) => (
+                      <th
+                        key={h || "acciones"}
+                        className={
+                          i === arr.length - 1
+                            ? `label font-normal ${stickyActionsTh}`
+                            : "label px-4 py-3 font-normal"
+                        }
+                      >
                         {h}
                       </th>
                     ))}
@@ -266,8 +276,8 @@ export default function CampaignsPage() {
                           <Badge value={c.status} />
                         </td>
                         <td className="px-4 py-3 font-mono text-[11px] text-muted">{fmtDate(c.created_at)}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex justify-end gap-1">
+                        <td className={stickyActionsTd}>
+                          <RowActions>
                             <IconBtn title="Detalle" onClick={() => setDetailOf(c)}>
                               <Eye className="size-3.5" />
                             </IconBtn>
@@ -339,9 +349,7 @@ export default function CampaignsPage() {
                               className="grid size-8 place-items-center border border-line text-muted transition hover:border-accent hover:text-accent"
                             >
                               <ShieldAlert className="size-3.5" />
-                            </Link>
-                          </div>
-                        </td>
+                            </Link></RowActions></td>
                       </tr>
                       {expandedId === c.campaign_id && (
                         <tr className="bg-white/[0.02]">
@@ -354,8 +362,7 @@ export default function CampaignsPage() {
                     );
                   })}
                 </tbody>
-              </table>
-            </div>
+              </table></TableScroll>
           </Panel>
         )}
       </div>

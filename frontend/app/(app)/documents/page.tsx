@@ -83,10 +83,8 @@ export default function DocumentsPage() {
 
       <Panel className="mb-4">
         <p className="text-sm text-muted">
-          Owner y Auditor ven documentos <strong className="text-fg">globales</strong> y de su{" "}
-          <strong className="text-fg">organización</strong>. Solo pueden crear/borrar los de organización.
-          {admin ? " Como platform admin también gestionas los globales." : ""} Cada archivo debe incluir al menos un
-          token <code className="text-accent">MK_CANARY_...</code> para hallazgos confirmados.
+          Son los documentos de <strong className="text-fg">ataque</strong> que se usan para {" "}
+          <strong className="text-fg">hallar vulnerabilidades</strong> en los sistemas.
         </p>
       </Panel>
 

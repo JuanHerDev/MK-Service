@@ -288,17 +288,44 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="mb-8 flex flex-col gap-4 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">
-      <div className="animate-fade-up">
-        <p className="label mb-3">
+    <div className="mb-6 flex flex-col gap-3 border-b border-line pb-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:pb-6">
+      <div className="min-w-0 flex-1 animate-fade-up">
+        <p className="label mb-2 sm:mb-3">
           <span className="text-accent">{index}</span> / {subtitle}
         </p>
-        <h1 className="text-4xl font-medium tracking-[-0.04em] sm:text-5xl">{title}</h1>
+        <h1 className="text-2xl font-medium tracking-[-0.04em] sm:text-4xl md:text-5xl">{title}</h1>
       </div>
-      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+      {actions && (
+        <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          {actions}
+        </div>
+      )}
     </div>
   );
 }
+
+/** Horizontal scroll for tables; keeps row action column visible on small screens. */
+export function TableScroll({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cx("overflow-x-auto overscroll-x-contain", className)}>
+      {children}
+    </div>
+  );
+}
+
+/** Stick actions to the right edge while the user scrolls the table horizontally. */
+export function RowActions({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex max-w-[min(100vw-2rem,280px)] flex-wrap justify-end gap-1 sm:max-w-none sm:flex-nowrap">
+      {children}
+    </div>
+  );
+}
+
+export const stickyActionsTh =
+  "sticky right-0 z-10 bg-panel px-3 py-3 text-right shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.45)] sm:px-4";
+export const stickyActionsTd =
+  "sticky right-0 z-10 bg-panel px-3 py-3 shadow-[-8px_0_12px_-8px_rgba(0,0,0,0.45)] sm:px-4";
 
 export { cx };
 
