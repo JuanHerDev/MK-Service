@@ -269,6 +269,14 @@ def test_target(
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target not found")
 
+    try:
+        from app.core.lab_wake import target_looks_like_lab, wake_lab_services
+
+        if target_looks_like_lab(target.chat_endpoint):
+            wake_lab_services(force=True)
+    except Exception:
+        pass
+
     ok, message = run_connectivity_test(target)
     target.last_test_at = datetime.now(timezone.utc)
     target.last_test_ok = ok

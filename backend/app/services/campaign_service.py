@@ -379,6 +379,16 @@ def execute_campaign_run(
     from app.models.attack_document import AttackDocument
     from app.services.attack_engine import load_doc_payload, run_all_probes
 
+    # Wake Render lab early (non-blocking) so cold start overlaps with setup
+    try:
+        from app.core.lab_wake import target_looks_like_lab, wake_lab_services
+
+        # Always attempt if LAB_WAKE_URL set; force on campaign start
+        # force=True ignores throttle; wait uses LAB_WAKE_WAIT_SECONDS if set
+        wake_lab_services(force=True, wait=True)
+    except Exception:
+        pass
+
     c = _load_campaign(db, campaign_id, organization_id)
     current = c.status.status_code if c.status else ""
     # Worker may pick up queued; API may have left it queued

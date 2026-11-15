@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     s3_secret_access_key: str | None = None
     s3_prefix: str = "mk-service/"
 
+    # Cold-start wake for companion lab on Render (comma-separated bases or /health URLs)
+    lab_wake_url: str = "https://mk-service-lab.onrender.com/health"
+    lab_wake_min_interval_seconds: int = 60
+    lab_wake_timeout_seconds: float = 15.0
+    lab_wake_wait_seconds: float = 0.0  # e.g. 45 to wait for Render cold start
+    lab_wake_host_substring: str = "onrender.com,localhost,127.0.0.1,mk-rag,rag-lab,rag_lab"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
